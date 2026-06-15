@@ -1,5 +1,5 @@
 import type { DataSource } from "./types.js";
-import type { Note, Project, Reference, RefScope, Session } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 import { projects as mockProjects, standaloneSessions as mockSessions } from "../../app/data/mockData.js";
 
 export class MockDataSource implements DataSource {
@@ -38,6 +38,16 @@ export class MockDataSource implements DataSource {
   }
 
   async archiveSession(_sessionId: string): Promise<void> {
+    // no-op in mock
+  }
+
+  // ---- writes (M3.1 — no-ops for mock data source) ----
+
+  async createSession(session: Session, _projectId?: string): Promise<Session> {
+    return session;
+  }
+
+  async updateSessionStatus(_sessionId: string, _status: SessionStatus): Promise<void> {
     // no-op in mock
   }
 
