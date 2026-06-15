@@ -16,6 +16,7 @@
     "@app/core": "*",
     "@app/preload": "*",
     "@app/renderer": "*",
+    "electron-store": "^8.2.0",
     "electron-updater": "6.8.3"
   },
   "devDependencies": {
