@@ -59,6 +59,12 @@ interface DataMutationValue {
   // M4.2 — GitHub connect flow
   /** Initiate GitHub OAuth connection; refreshes data on completion. */
   connectGitHub(): Promise<{ success: boolean }>;
+
+  // M4.3 — PR merge + external links
+  /** Merge a pull request via Octokit and refresh data. */
+  mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
+  /** Open a URL in the system browser via IPC. */
+  openUrl(url: string): Promise<void>;
 }
 
 const DataMutationContext = createContext<DataMutationValue>(null!);
@@ -331,6 +337,23 @@ export function DataProvider({
         setError(err instanceof Error ? err.message : "Failed to connect GitHub");
         throw err;
       }
+    },
+
+    /** M4.3 — Merge a PR via Octokit and refresh all data. */
+    async mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }> {
+      try {
+        const result = await activeSource.mergePR(owner, repo, prNumber);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to merge PR");
+        throw err;
+      }
+    },
+
+    /** M4.3 — Open a URL in the system browser via IPC. */
+    async openUrl(url: string): Promise<void> {
+      await activeSource.openUrl(url);
     },
 
     githubConnected,

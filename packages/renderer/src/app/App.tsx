@@ -4,6 +4,7 @@ import { ProjectView } from "./components/ProjectView";
 import { HomeView } from "./components/HomeView";
 import { TaskView } from "./components/TaskView";
 import { SessionDetail } from "./components/SessionDetail";
+import { useDataMutations } from "../lib/data/DataProvider.js";
 import { projects, standaloneSessions as seed, Session, Reference } from "./data/mockData";
 import { sessionStateInfo } from "./components/SessionStateBadge";
 
@@ -36,6 +37,7 @@ function NewSessionView({ onStart, onClose }: { onStart: (prompt: string) => voi
 type View = "home" | "project" | "session" | "new-session";
 
 export default function App() {
+  const mutations = useDataMutations();
   const [view, setView] = useState<View>("home");
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0].id);
   const [projectInitialSession, setProjectInitialSession] = useState<string | null>(null);
@@ -76,6 +78,11 @@ export default function App() {
     setSessions((prev) => prev.map((s) =>
       s.id === sessionId ? { ...s, references: [ref, ...(s.references ?? [])] } : s
     ));
+  };
+
+  /** Stop the agent for a session — calls both stopAgent and updateSessionStatus for clean transition. */
+  const handleStopAgent = (sessionId: string) => {
+    mutations.stopAgent(sessionId);
   };
 
   const createSession = (prompt: string) => {
@@ -147,6 +154,7 @@ export default function App() {
             session={session}
             prs={sessionPRs}
             onAddReference={(r) => addReferenceToSession(session.id, r)}
+            onStopAgent={() => handleStopAgent(session.id)}
             onClose={() => setView("home")}
           />
         )}
