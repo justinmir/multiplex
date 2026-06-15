@@ -7,107 +7,120 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_OAUTH_CLIENT_ID || "";
 const GITHUB_REDIRECT_PORT = 39876; // Fixed port for OAuth callback
 
 export class GitHubAuth {
+  #authInProgress = false; // Prevent concurrent OAuth flows
 
   /**
    * Start the GitHub OAuth flow.
    * Opens system browser → user authenticates → local server captures code → exchanges for token.
    */
   async startOAuth(): Promise<{ success: boolean }> {
-    // Generate a unique state token for CSRF protection
-    const state = randomUUID();
+    if (this.#authInProgress) {
+      console.warn("GitHub OAuth already in progress — ignoring duplicate call");
+      return { success: false };
+    }
 
-    // Build the GitHub OAuth authorize URL
-    const params = new URLSearchParams({
-      client_id: GITHUB_CLIENT_ID,
-      redirect_uri: `http://localhost:${GITHUB_REDIRECT_PORT}/callback`,
-      scope: "repo",
-      state,
-    });
+    this.#authInProgress = true;
+    try {
+      // Generate a unique state token for CSRF protection
+      const state = randomUUID();
 
-    const authUrl = `https://github.com/login/oauth/authorize?${params}`;
-
-    return new Promise((resolve) => {
-      // Set up a local HTTP server to capture the callback
-      const server = http.createServer(async (req, res) => {
-        try {
-          if (!req.url) {
-            res.writeHead(400);
-            res.end("Bad request");
-            return;
-          }
-
-          const url = new URL(req.url, `http://localhost:${GITHUB_REDIRECT_PORT}`);
-
-          if (url.pathname !== "/callback") {
-            res.writeHead(404);
-            res.end("Not found");
-            return;
-          }
-
-          // Verify CSRF state
-          const receivedState = url.searchParams.get("state");
-          if (receivedState !== state) {
-            res.writeHead(403);
-            res.end("Invalid state parameter — possible CSRF attack");
-            server.close();
-            resolve({ success: false });
-            return;
-          }
-
-          const code = url.searchParams.get("code");
-
-          if (!code) {
-            // User denied access
-            res.writeHead(200);
-            res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Authorization cancelled</h2><p>You can close this window.</p></body></html>`);
-            server.close();
-            resolve({ success: false });
-            return;
-          }
-
-          // Exchange the authorization code for a token
-          const token = await exchangeCodeForToken(code);
-
-          if (token) {
-            configStore.setGitHubToken(token);
-            res.writeHead(200);
-            res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Connected to GitHub</h2><p>You can close this window and return to the app.</p></body></html>`);
-            server.close();
-            resolve({ success: true });
-          } else {
-            res.writeHead(500);
-            res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Token exchange failed</h2><p>Please try again.</p></body></html>`);
-            server.close();
-            resolve({ success: false });
-          }
-        } catch (err) {
-          console.error("OAuth callback error:", err);
-          res.writeHead(500);
-          res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Error</h2><p>An unexpected error occurred.</p></body></html>`);
-        }
+      // Build the GitHub OAuth authorize URL
+      const params = new URLSearchParams({
+        client_id: GITHUB_CLIENT_ID,
+        redirect_uri: `http://localhost:${GITHUB_REDIRECT_PORT}/callback`,
+        scope: "repo",
+        state,
       });
 
-      server.listen(GITHUB_REDIRECT_PORT, () => {
-        // Open system browser to GitHub OAuth page
-        shell.openExternal(authUrl).catch((err) => {
-          console.error("Failed to open auth URL:", err);
-          server.close();
-          resolve({ success: false });
+      const authUrl = `https://github.com/login/oauth/authorize?${params}`;
+
+      return new Promise((resolve) => {
+        // Set up a local HTTP server to capture the callback
+        const server = http.createServer(async (req, res) => {
+          try {
+            if (!req.url) {
+              res.writeHead(400);
+              res.end("Bad request");
+              return;
+            }
+
+            const url = new URL(req.url, `http://localhost:${GITHUB_REDIRECT_PORT}`);
+
+            if (url.pathname !== "/callback") {
+              res.writeHead(404);
+              res.end("Not found");
+              return;
+            }
+
+            // Verify CSRF state
+            const receivedState = url.searchParams.get("state");
+            if (receivedState !== state) {
+              res.writeHead(403);
+              res.end("Invalid state parameter — possible CSRF attack");
+              server.close();
+              resolve({ success: false });
+              return;
+            }
+
+            const code = url.searchParams.get("code");
+
+            if (!code) {
+              // User denied access
+              res.writeHead(200);
+              res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Authorization cancelled</h2><p>You can close this window.</p></body></html>`);
+              server.close();
+              resolve({ success: false });
+              return;
+            }
+
+            // Exchange the authorization code for a token
+            const token = await exchangeCodeForToken(code);
+
+            if (token) {
+              configStore.setGitHubToken(token);
+              res.writeHead(200);
+              res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Connected to GitHub</h2><p>You can close this window and return to the app.</p></body></html>`);
+              server.close();
+              resolve({ success: true });
+            } else {
+              res.writeHead(500);
+              res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Token exchange failed</h2><p>Please try again.</p></body></html>`);
+              server.close();
+              resolve({ success: false });
+            }
+          } catch (err) {
+            console.error("OAuth callback error:", err);
+            res.writeHead(500);
+            res.end(`<html><body style="font-family:sans-serif;text-align:center;margin-top:60px"><h2>Error</h2><p>An unexpected error occurred.</p></body></html>`);
+            server.close();
+            resolve({ success: false });
+          }
         });
 
-        // Timeout after 5 minutes if user doesn't complete flow
-        setTimeout(() => {
-          server.close();
-          resolve({ success: false });
-        }, 300_000);
-      });
+        server.listen(GITHUB_REDIRECT_PORT, () => {
+          // Open system browser to GitHub OAuth page
+          shell.openExternal(authUrl).catch((err) => {
+            console.error("Failed to open auth URL:", err);
+            server.close();
+            resolve({ success: false });
+          });
 
-      // Handle server errors
-      server.on("error", (err) => {
-        console.error("OAuth server error:", err);
-        resolve({ success: false });
+          // Timeout after 5 minutes if user doesn't complete flow
+          setTimeout(() => {
+            server.close();
+            resolve({ success: false });
+          }, 300_000);
+        });
+
+        // Handle server errors
+        server.on("error", (err) => {
+          console.error("OAuth server error:", err);
+          resolve({ success: false });
+        });
       });
-    });
+    } finally {
+      this.#authInProgress = false;
+    }
   }
 }
 
