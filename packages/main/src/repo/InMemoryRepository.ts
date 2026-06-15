@@ -23,7 +23,7 @@ export class InMemoryRepository implements Repository {
   private counter = 0;
 
   // ---- helpers ----
-  private nextId(prefix: string): string {
+  protected nextId(prefix: string): string {
     return `${prefix}_${++this.counter}`;
   }
 
@@ -132,5 +132,22 @@ export class InMemoryRepository implements Repository {
     const s = this.sessions.get(id);
     if (!s) return;
     this.sessions.set(id, { ...s, archived: true });
+  }
+
+  /** Synchronously list sessions with no project association (standalone). */
+  protected listStandaloneSessionsSync(): Session[] {
+    const result: Session[] = [];
+    for (const [sid, projId] of this.sessionProjectId) {
+      if (projId === null) {
+        const s = this.sessions.get(sid);
+        if (s) result.push(s);
+      }
+    }
+    return result;
+  }
+
+  /** Synchronously list all projects. */
+  protected listProjectsSync(): Project[] {
+    return Array.from(this.projects.values());
   }
 }
