@@ -12,6 +12,7 @@ export default defineConfig({
       // The `exports.types` field in each package points at src files,
       // but the bundler needs an explicit alias to find them.
       '@app/core': path.resolve(__dirname, '../core/src/index.ts'),
+      '@app/preload': path.resolve(__dirname, '../preload/src/index.ts'),
     },
   },
   plugins: [
