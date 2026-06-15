@@ -89,10 +89,8 @@ export function AppShell() {
     if (archived) mutations.archiveSession(id);
   };
 
-  const addReferenceToSession = (sessionId: string, ref: Reference) => {
-    setSessions((prev) => prev.map((s) =>
-      s.id === sessionId ? { ...s, references: [ref, ...(s.references ?? [])] } : s
-    ));
+  const addReferenceToSession = async (sessionId: string, ref: Reference) => {
+    await mutations.upsertSessionReference(sessionId, ref);
   };
 
   const createSession = async (prompt: string) => {
