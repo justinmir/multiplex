@@ -29,8 +29,11 @@ export interface IpcContract {
   "prs:list": { req: { owner: string; repo: string }; res: PullRequest[] };
   "checks:get": { req: { owner: string; repo: string; branch: string }; res: CheckRun[] };
 
-  // M2.4 — Project sync with GitHub  
+  // M2.4 — Project sync with GitHub
   "projects:sync": { req: { projectId: string }; res: Project | null };
+
+  // M2.5 — Project CRUD (github:get-status already exists in M2.2)
+  "projects:upsert": { req: { project: Project }; res: Project };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];
