@@ -38,7 +38,7 @@ export class InMemoryRepository implements Repository {
   }
 
   async upsertProject(p: Project): Promise<Project> {
-    this.projects.set(p.id, p);
+    this.projects.set(p.id, { ...p });
     return { ...p };
   }
 
@@ -66,7 +66,7 @@ export class InMemoryRepository implements Repository {
       this.sessionProjectId.set(withId.id, projectId);
       return { ...withId };
     }
-    this.sessions.set(s.id, s);
+    this.sessions.set(s.id, { ...s });
     this.sessionProjectId.set(s.id, projectId);
     return { ...s };
   }
@@ -84,7 +84,7 @@ export class InMemoryRepository implements Repository {
   }
 
   async upsertNote(projectId: string, n: Note): Promise<Note> {
-    const withId = n.id ? n : { ...n, id: this.nextId("note") };
+    const withId = n.id ? { ...n } : { ...n, id: this.nextId("note") };
     this.notes.set(noteKey(projectId, withId.id), withId);
     return { ...withId };
   }
@@ -106,7 +106,7 @@ export class InMemoryRepository implements Repository {
   }
 
   async upsertReference(scope: RefScope, r: Reference): Promise<Reference> {
-    const withId = r.id ? r : { ...r, id: this.nextId("ref") };
+    const withId = r.id ? { ...r } : { ...r, id: this.nextId("ref") };
     this.references.set(refKey(scope, withId.id), withId);
     return { ...withId };
   }
@@ -118,7 +118,7 @@ export class InMemoryRepository implements Repository {
   // ---- activity log ----
   async appendActivity(projectId: string, a: ActivityItem): Promise<void> {
     const items = this.activity.get(projectId) ?? [];
-    const withId = a.id ? a : { ...a, id: this.nextId("act") };
+    const withId = a.id ? { ...a } : { ...a, id: this.nextId("act") };
     items.push(withId);
     this.activity.set(projectId, items);
   }
