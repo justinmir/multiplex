@@ -10,6 +10,7 @@ import { registerGitHubHandlers } from "../ipc/handlers/github.js";
 import { SyncService, setSyncService } from "../git/SyncService.js";
 import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
+import { registerSessionMessageHandlers } from "../ipc/handlers/session-messages.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -40,6 +41,9 @@ export function createIpcModule(): AppModule {
 
       // M3.1: Session CRUD handlers (create + status update)
       registerSessionWriteHandlers(repo);
+
+      // M3.4: Agent workflow foundation (message streaming + agent execution stub)
+      registerSessionMessageHandlers(repo);
     },
   };
 }
