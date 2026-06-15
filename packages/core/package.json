@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": { "build": "vite build", "typecheck": "tsc --noEmit" },
   "exports": {
-    ".": { "types": "./src/index.ts", "default": "./dist/index.js" }
+    ".": { "types": "./src/index.ts", "default": "./src/index.ts" }
   },
   "devDependencies": { "typescript": "6.0.2", "vite": "8.0.3" }
 }
