@@ -57,6 +57,7 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@app/preload": "*",
     "@babel/core": "^7.29.0",
     "@tailwindcss/vite": "4.1.12",
     "tailwindcss": "4.1.12",
