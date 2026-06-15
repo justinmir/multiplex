@@ -34,4 +34,8 @@ export interface DataSource {
 
   // M4.2 — GitHub connect flow
   connectGitHub(): Promise<{ success: boolean }>;
+
+  // M4.3 — PR merge + external links
+  mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
+  openUrl(url: string): Promise<void>;
 }

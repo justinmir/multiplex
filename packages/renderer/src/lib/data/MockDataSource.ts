@@ -94,4 +94,14 @@ export class MockDataSource implements DataSource {
   async connectGitHub(): Promise<{ success: boolean }> {
     return { success: false };
   }
+
+  // ---- M4.3 — PR merge + external links (stubs) ----
+
+  async mergePR(_owner: string, _repo: string, _prNumber: number): Promise<{ success: boolean }> {
+    return { success: false };
+  }
+
+  async openUrl(_url: string): Promise<void> {
+    // no-op in mock — renderer can't open external URLs without IPC
+  }
 }
