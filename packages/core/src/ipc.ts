@@ -19,6 +19,11 @@ export interface IpcContract {
   "refs:upsert": { req: { scope: RefScope; reference: Reference }; res: Reference };
   "refs:delete": { req: { scope: RefScope; refId: string }; res: void };
   "sessions:archive": { req: { sessionId: string }; res: void };
+
+  // M2.2 — GitHub OAuth + token management
+  "github:get-token": { req: void; res: string | null };
+  "github:connect": { req: void; res: { success: boolean } };
+  "github:get-status": { req: void; res: { connected: boolean } };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];
