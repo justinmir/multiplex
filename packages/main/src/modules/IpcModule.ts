@@ -6,6 +6,8 @@ import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
 import { registerRepoWriteHandlers } from "../ipc/handlers/writes.js";
 import { registerGitHubAuthHandlers } from "../ipc/handlers/github-auth.js";
 import { registerGitHubHandlers } from "../ipc/handlers/github.js";
+import { SyncService, setSyncService } from "../git/SyncService.js";
+import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -25,6 +27,11 @@ export function createIpcModule(): AppModule {
 
       // M2.3: GitHub API client (Octokit) — PRs, checks, reviews
       registerGitHubHandlers();
+
+      // M2.4: Wire SyncService with repository instance and register sync handler
+      const syncSvc = new SyncService(repo);
+      setSyncService(syncSvc);
+      registerSyncHandlers();
     },
   };
 }
