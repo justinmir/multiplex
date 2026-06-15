@@ -44,3 +44,13 @@ runs:
           npm install
         fi
       shell: bash
+
+    # Newer npm (shipped with Node "latest") gates dependency install scripts
+    # behind an allow-list and skips Electron's `postinstall`, so its platform
+    # binary is never downloaded. The main/preload Vite configs introspect
+    # versions via `npx electron`, and the boot smoke test launches the real
+    # app, so run Electron's installer explicitly. It is idempotent: a no-op
+    # when the binary is already present.
+    - name: Ensure Electron binary is installed
+      run: node "$(node -p "require.resolve('electron/install.js')")"
+      shell: bash
