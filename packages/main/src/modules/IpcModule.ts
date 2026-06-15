@@ -9,6 +9,7 @@ import { registerGitHubAuthHandlers } from "../ipc/handlers/github-auth.js";
 import { registerGitHubHandlers } from "../ipc/handlers/github.js";
 import { SyncService, setSyncService } from "../git/SyncService.js";
 import { registerSyncHandlers } from "../ipc/handlers/sync.js";
+import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -36,6 +37,9 @@ export function createIpcModule(): AppModule {
       const syncSvc = new SyncService(repo);
       setSyncService(syncSvc);
       registerSyncHandlers();
+
+      // M3.1: Session CRUD handlers (create + status update)
+      registerSessionWriteHandlers(repo);
     },
   };
 }

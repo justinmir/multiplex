@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { Note, Project, Reference, RefScope, Session } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 import type { DataSource } from "./types.js";
 
 interface DataContextValue {
@@ -26,6 +26,12 @@ interface DataMutationValue {
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   /** Archive a standalone session — optimistic update on local state, then persist. */
   archiveSession(sessionId: string): Promise<void>;
+
+  // M3.1 — session CRUD
+  /** Create a new standalone session via IPC and refresh data. */
+  createSession(session: Session, projectId?: string): Promise<Session>;
+  /** Update a session's status — optimistic update on local state, then persist. */
+  updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
 
   // M2.5 — project management + sync
   /** Create or update a project, then refresh all data from IPC. */
@@ -156,6 +162,35 @@ export function DataProvider({
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
         setError(err instanceof Error ? err.message : "Failed to archive session");
+        throw err;
+      }
+    },
+
+    /** Create a new standalone session via IPC and refresh data. */
+    async createSession(session: Session, projectId?: string): Promise<Session> {
+      try {
+        const result = await activeSource.createSession(session, projectId);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create session");
+        throw err;
+      }
+    },
+
+    /** Update a session's status — optimistic update on local state + persist via IPC. */
+    async updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void> {
+      const prevSessions = standaloneSessions;
+      // Optimistic update
+      setStandaloneSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, status } : s))
+      );
+      try {
+        await activeSource.updateSessionStatus(sessionId, status);
+      } catch (err) {
+        // Roll back optimistic update on failure
+        setStandaloneSessions(prevSessions);
+        setError(err instanceof Error ? err.message : "Failed to update session status");
         throw err;
       }
     },
