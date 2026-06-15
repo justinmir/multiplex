@@ -27,6 +27,10 @@ interface DataMutationValue {
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   /** Archive a standalone session — optimistic update on local state, then persist. */
   archiveSession(sessionId: string): Promise<void>;
+  /** Upsert a reference scoped to a specific session, then refresh all data from IPC. */
+  upsertSessionReference(sessionId: string, ref: Reference): Promise<Reference>;
+  /** Delete a reference scoped to a specific session, then refresh all data from IPC. */
+  deleteSessionReference(sessionId: string, refId: string): Promise<void>;
 
   // M3.1 — session CRUD
   /** Create a new standalone session via IPC and refresh data. */
@@ -171,6 +175,29 @@ export function DataProvider({
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
         setError(err instanceof Error ? err.message : "Failed to archive session");
+        throw err;
+      }
+    },
+
+    /** Upsert a reference scoped to a specific session, then refresh all data from IPC. */
+    async upsertSessionReference(sessionId: string, ref: Reference): Promise<Reference> {
+      try {
+        const result = await activeSource.upsertSessionReference(sessionId, ref);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to upsert session reference");
+        throw err;
+      }
+    },
+
+    /** Delete a reference scoped to a specific session, then refresh all data from IPC. */
+    async deleteSessionReference(sessionId: string, refId: string): Promise<void> {
+      try {
+        await activeSource.deleteSessionReference(sessionId, refId);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete session reference");
         throw err;
       }
     },
