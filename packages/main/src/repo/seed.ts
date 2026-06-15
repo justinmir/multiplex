@@ -1,0 +1,128 @@
+import type { Note, Project, Reference, Session, ActivityItem } from "@app/core";
+
+const NOW = Date.now();
+const min = 60_000, hr = 3_600_000, day = 86_400_000;
+
+/** Minimal seed projects — mirrors renderer mockData, computed at module load. */
+export const seedProjects: Project[] = [
+  {
+    id: "p_ingest",
+    name: "Ingest Pipeline v2",
+    slug: "ingest-v2",
+    description: "Rewriting the event ingestion pipeline for 10x throughput and exactly-once semantics.",
+    repos: ["acme/ingest", "acme/shared-utils"],
+    status: "active",
+    color: "#d4a574",
+    progress: 62,
+    openPRs: 4,
+    activeSessions: 2,
+    lastActivity: new Date(NOW - 12 * min).toISOString(),
+    prs: [],
+    sessions: [
+      {
+        id: "s_ingest_1",
+        title: "Investigate p99 spike under replay load",
+        status: "running",
+        model: "claude-opus-4-7",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/replay-investigate" }],
+        startedAt: new Date(NOW - 12 * min).toISOString(),
+        createdAtMs: NOW - 12 * min,
+        durationMin: 12,
+        tokens: 184_220,
+        cost: 2.41,
+        messages: [],
+      },
+      {
+        id: "s_ingest_2",
+        title: "Draft metrics exporter for dedupe hit rate",
+        status: "review_pending",
+        model: "claude-sonnet-4-6",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/metrics-export" }],
+        startedAt: new Date(NOW - day).toISOString(),
+        createdAtMs: NOW - day,
+        durationMin: 48,
+        tokens: 92_104,
+        cost: 0.84,
+        messages: [],
+      },
+    ],
+    notes: [
+      { id: "n_ingest_1", title: "Cutover runbook", body: "Two-phase cutover plan.", author: "ana", updatedAt: new Date(NOW - 2 * day).toISOString(), tags: ["runbook"] },
+    ],
+    references: [],
+    activity: [
+      { id: "a_ingest_1", kind: "session", text: "Session started — Investigate p99 spike under replay load", ts: new Date(NOW - 12 * min).toISOString() },
+    ],
+    summary: "Backpressure-aware writer merged. Dedupe layer is critical path.",
+    nextSteps: ["Review dedupe bloom filter memory ceiling", "Schedule SRE handoff"],
+  },
+  {
+    id: "p_billing",
+    name: "Billing Migration",
+    slug: "billing-mig",
+    description: "Move legacy billing off the monolith onto the new ledger service.",
+    repos: ["acme/ledger", "acme/web"],
+    status: "active",
+    color: "#7ec699",
+    progress: 28,
+    openPRs: 1,
+    activeSessions: 1,
+    lastActivity: new Date(NOW - hr).toISOString(),
+    prs: [],
+    sessions: [
+      {
+        id: "s_billing_1",
+        title: "Build parity test suite for tax calc",
+        status: "checks_failing",
+        model: "claude-sonnet-4-6",
+        workspaces: [{ repo: "acme/ledger", branch: "agent/tax-parity" }],
+        startedAt: new Date(NOW - hr).toISOString(),
+        createdAtMs: NOW - hr,
+        durationMin: 64,
+        tokens: 218_400,
+        cost: 1.92,
+        messages: [],
+      },
+    ],
+    notes: [],
+    references: [],
+    activity: [
+      { id: "a_billing_1", kind: "session", text: "Session started — Build parity test suite", ts: new Date(NOW - hr).toISOString() },
+    ],
+    summary: "Schema audit complete. Backfilling historical invoices is the hard problem.",
+    nextSteps: ["Lock proration spec with finance"],
+  },
+];
+
+/** Minimal seed standalone sessions — mirrors renderer mockData, computed at module load. */
+export const seedStandaloneSessions: Session[] = [
+  {
+    id: "ss_changelog",
+    title: "Draft changelog for v2.4 release",
+    prompt: "Write a customer-facing changelog for v2.4.",
+    status: "running",
+    model: "claude-sonnet-4-6",
+    workspaces: [{ repo: "acme/web", branch: "agent/changelog-v2.4" }],
+    startedAt: new Date(NOW - 18 * min).toISOString(),
+    createdAtMs: NOW - 18 * min,
+    durationMin: 18,
+    tokens: 42_100,
+    cost: 0.38,
+    messages: [],
+  },
+  {
+    id: "ss_rename",
+    title: "Rename getCwd to getCurrentWorkingDirectory",
+    prompt: "Rename getCwd across the repo.",
+    status: "mergeable",
+    model: "claude-haiku-4-5-20251001",
+    workspaces: [{ repo: "acme/utils", branch: "agent/rename-getcwd" }],
+    linkedPRs: [{ repo: "acme/utils", number: 1421 }],
+    startedAt: new Date(NOW - 2 * hr).toISOString(),
+    createdAtMs: NOW - 2 * hr,
+    durationMin: 4,
+    tokens: 18_400,
+    cost: 0.06,
+    messages: [],
+  },
+];
