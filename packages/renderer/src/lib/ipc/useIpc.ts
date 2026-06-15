@@ -5,7 +5,6 @@ import type { IpcChannel, IpcReq, IpcRes } from "@app/core";
 export function useInvoke<C extends IpcChannel>(
   channel: C,
   req: IpcReq<C>,
-  deps?: unknown[],
 ): { data: IpcRes<C> | null; loading: boolean; error: Error | null; execute: () => void } {
   const [data, setData] = useState<IpcRes<C> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,8 +14,7 @@ export function useInvoke<C extends IpcChannel>(
     setLoading(true);
     setError(null);
     try {
-      const result = await call(channel, req);
-      setData(result);
+      setData(await call(channel, req));
     } catch (e) {
       setError(e as Error);
     } finally {
@@ -24,11 +22,14 @@ export function useInvoke<C extends IpcChannel>(
     }
   }, [channel, req]);
 
+  // Runs on mount and whenever the request changes. Inline `req` objects from
+  // call sites are memoized by React Compiler, so a stable request keeps
+  // `execute` stable and the effect fires once — the previous version forced a
+  // variable-shaped dependency array which both broke the Rules of Hooks and
+  // looped on every render.
   useEffect(() => {
-    if (!deps) {
-      execute();
-    }
-  }, deps ? [...deps] : [execute]);
+    execute();
+  }, [execute]);
 
   return { data, loading, error, execute };
 }
