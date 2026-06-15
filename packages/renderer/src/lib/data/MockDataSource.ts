@@ -41,6 +41,16 @@ export class MockDataSource implements DataSource {
     // no-op in mock
   }
 
+  // ---- writes (M3.3 — session-scoped references; not implemented in mock) ----
+
+  async upsertSessionReference(_sessionId: string, reference: Reference): Promise<Reference> {
+    return reference;
+  }
+
+  async deleteSessionReference(_sessionId: string, _refId: string): Promise<void> {
+    // no-op in mock
+  }
+
   // ---- writes (M3.1 — no-ops for mock data source) ----
 
   async createSession(session: Session, _projectId?: string): Promise<Session> {

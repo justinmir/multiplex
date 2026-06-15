@@ -44,6 +44,16 @@ export class IpcDataSource implements DataSource {
     return call("sessions:archive", { sessionId });
   }
 
+  // ---- writes (M3.3 — session-scoped references) ----
+
+  async upsertSessionReference(sessionId: string, reference: Reference): Promise<Reference> {
+    return call("refs:upsert", { scope: { sessionId }, reference });
+  }
+
+  async deleteSessionReference(sessionId: string, refId: string): Promise<void> {
+    return call("refs:delete", { scope: { sessionId }, refId });
+  }
+
   // ---- writes (M3.1 — session CRUD) ----
 
   async createSession(session: Session, projectId?: string): Promise<Session> {
