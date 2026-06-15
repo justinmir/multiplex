@@ -1,5 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import type { Project, Session } from "@app/core";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { Note, Project, Reference, RefScope, Session } from "@app/core";
 import type { DataSource } from "./types.js";
 
 interface DataContextValue {
@@ -11,6 +11,23 @@ interface DataContextValue {
 }
 
 const DataContext = createContext<DataContextValue>(null!);
+
+// ---- Mutation context (M1.5) ----
+
+interface DataMutationValue {
+  /** Upsert a note in the given project, then refresh all data from IPC. */
+  upsertNote(projectId: string, note: Note): Promise<Note>;
+  /** Delete a note from the given project, then refresh all data from IPC. */
+  deleteNote(projectId: string, noteId: string): Promise<void>;
+  /** Upsert a reference in the given scope, then refresh all data from IPC. */
+  upsertReference(scope: RefScope, reference: Reference): Promise<Reference>;
+  /** Delete a reference from the given scope, then refresh all data from IPC. */
+  deleteReference(scope: RefScope, refId: string): Promise<void>;
+  /** Archive a standalone session — optimistic update on local state, then persist. */
+  archiveSession(sessionId: string): Promise<void>;
+}
+
+const DataMutationContext = createContext<DataMutationValue>(null!);
 
 export function DataProvider({
   children,
@@ -55,7 +72,77 @@ export function DataProvider({
     refresh: loadData,
   };
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  // ---- Mutation methods (M1.5) ----
+
+  /** Project-scoped mutations: call IPC write, then full refresh to stay consistent. */
+  const mutationValue = useMemo<DataMutationValue>(() => ({
+    async upsertNote(projectId: string, note: Note): Promise<Note> {
+      try {
+        const result = await activeSource.upsertNote(projectId, note);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to upsert note");
+        throw err;
+      }
+    },
+
+    async deleteNote(projectId: string, noteId: string): Promise<void> {
+      try {
+        await activeSource.deleteNote(projectId, noteId);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete note");
+        throw err;
+      }
+    },
+
+    async upsertReference(scope: RefScope, reference: Reference): Promise<Reference> {
+      try {
+        const result = await activeSource.upsertReference(scope, reference);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to upsert reference");
+        throw err;
+      }
+    },
+
+    async deleteReference(scope: RefScope, refId: string): Promise<void> {
+      try {
+        await activeSource.deleteReference(scope, refId);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete reference");
+        throw err;
+      }
+    },
+
+    /** Archive session — optimistic update on local state + persist via IPC. */
+    async archiveSession(sessionId: string): Promise<void> {
+      const prevSessions = standaloneSessions;
+      // Optimistic update
+      setStandaloneSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, archived: true } : s))
+      );
+      try {
+        await activeSource.archiveSession(sessionId);
+      } catch (err) {
+        // Roll back optimistic update on failure
+        setStandaloneSessions(prevSessions);
+        setError(err instanceof Error ? err.message : "Failed to archive session");
+        throw err;
+      }
+    },
+  }), [activeSource, loadData, standaloneSessions]);
+
+  return (
+    <DataContext.Provider value={value}>
+      <DataMutationContext.Provider value={mutationValue}>
+        {children}
+      </DataMutationContext.Provider>
+    </DataContext.Provider>
+  );
 }
 
 export function useProjects(): Project[] {
@@ -85,4 +172,11 @@ export function useDataLoading(): Pick<DataContextValue, "loading" | "error"> {
   const ctx = useContext(DataContext);
   if (!ctx) throw new Error("useDataLoading must be used within DataProvider");
   return { loading: ctx.loading, error: ctx.error };
+}
+
+/** Access mutation methods for notes, references, and session metadata. */
+export function useDataMutations(): DataMutationValue {
+  const ctx = useContext(DataMutationContext);
+  if (!ctx) throw new Error("useDataMutations must be used within DataProvider");
+  return ctx;
 }

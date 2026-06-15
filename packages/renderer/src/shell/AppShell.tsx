@@ -4,7 +4,7 @@ import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
 import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
-import { useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
+import { useDataMutations, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import type { Session, Reference } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 
@@ -41,6 +41,7 @@ type View = "home" | "project" | "session" | "new-session";
 export function AppShell() {
   const projects = useProjects();
   const dataSessions = useStandaloneSessions();
+  const mutations = useDataMutations();
   const [view, setView] = useState<View>("home");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [projectInitialSession, setProjectInitialSession] = useState<string | null>(null);
@@ -81,7 +82,10 @@ export function AppShell() {
   };
 
   const archiveSession = (id: string, archived: boolean) => {
+    // Optimistic update on local state
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, archived } : s)));
+    // Persist to disk only when archiving (un-archiving is local-only for now)
+    if (archived) mutations.archiveSession(id);
   };
 
   const addReferenceToSession = (sessionId: string, ref: Reference) => {
