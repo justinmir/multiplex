@@ -1,8 +1,16 @@
+import type { Project, Session } from "./domain.js";
+
 export const EVENT_CHANNEL = "multiplex:event" as const;
 
 /** Request/response channels. Add one entry per feature. */
 export interface IpcContract {
   "app:ping": { req: { value: string }; res: { value: string; ts: number } };
+
+  // M1.3 — repository read channels
+  "projects:list": { req: void; res: Project[] };
+  "projects:get": { req: { id: string }; res: Project | null };
+  "sessions:list": { req: { projectId?: string | null }; res: Session[] };
+  "sessions:get": { req: { id: string }; res: Session | null };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

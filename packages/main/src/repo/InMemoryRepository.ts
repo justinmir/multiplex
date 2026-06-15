@@ -45,9 +45,17 @@ export class InMemoryRepository implements Repository {
   // ---- sessions ----
   async listSessions(opts?: { projectId?: string | null }): Promise<Session[]> {
     const all = Array.from(this.sessions.values());
-    if (opts?.projectId === undefined || opts.projectId === null) {
+    // No filter or undefined → return all sessions
+    if (opts?.projectId === undefined) {
       return all.map((s) => ({ ...s }));
     }
+    // Explicitly null → return only standalone sessions (no project association)
+    if (opts.projectId === null) {
+      return all
+        .filter((s) => this.sessionProjectId.get(s.id) === null)
+        .map((s) => ({ ...s }));
+    }
+    // Specific projectId string → filter to that project's sessions
     return all
       .filter((s) => this.sessionProjectId.get(s.id) === opts!.projectId)
       .map((s) => ({ ...s }));
