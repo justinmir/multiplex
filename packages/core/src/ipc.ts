@@ -28,6 +28,9 @@ export interface IpcContract {
   // M2.3 — GitHub API client (Octokit)
   "prs:list": { req: { owner: string; repo: string }; res: PullRequest[] };
   "checks:get": { req: { owner: string; repo: string; branch: string }; res: CheckRun[] };
+
+  // M2.4 — Project sync with GitHub  
+  "projects:sync": { req: { projectId: string }; res: Project | null };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];
