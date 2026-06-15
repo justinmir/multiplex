@@ -5,6 +5,7 @@ import { JsonRepository } from "../repo/JsonRepository.js";
 import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
 import { registerRepoWriteHandlers } from "../ipc/handlers/writes.js";
 import { registerGitHubAuthHandlers } from "../ipc/handlers/github-auth.js";
+import { registerGitHubHandlers } from "../ipc/handlers/github.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -21,6 +22,9 @@ export function createIpcModule(): AppModule {
 
       // M2.2: GitHub OAuth + token management handlers
       registerGitHubAuthHandlers();
+
+      // M2.3: GitHub API client (Octokit) — PRs, checks, reviews
+      registerGitHubHandlers();
     },
   };
 }

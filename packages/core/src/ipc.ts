@@ -1,4 +1,4 @@
-import type { Note, Project, Reference, Session } from "./domain.js";
+import type { CheckRun, Note, Project, PullRequest, Reference, Session } from "./domain.js";
 import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
@@ -24,6 +24,10 @@ export interface IpcContract {
   "github:get-token": { req: void; res: string | null };
   "github:connect": { req: void; res: { success: boolean } };
   "github:get-status": { req: void; res: { connected: boolean } };
+
+  // M2.3 — GitHub API client (Octokit)
+  "prs:list": { req: { owner: string; repo: string }; res: PullRequest[] };
+  "checks:get": { req: { owner: string; repo: string; branch: string }; res: CheckRun[] };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

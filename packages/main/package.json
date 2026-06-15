@@ -16,6 +16,7 @@
     "@app/core": "*",
     "@app/preload": "*",
     "@app/renderer": "*",
+    "@octokit/rest": "^21.1.0",
     "electron-store": "^8.2.0",
     "electron-updater": "6.8.3"
   },
