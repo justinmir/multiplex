@@ -25,6 +25,16 @@ interface DataMutationValue {
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   /** Archive a standalone session — optimistic update on local state, then persist. */
   archiveSession(sessionId: string): Promise<void>;
+
+  // M2.5 — project management + sync
+  /** Create or update a project, then refresh all data from IPC. */
+  upsertProject(project: Project): Promise<Project>;
+  /** Trigger GitHub PR sync for a project; refreshes data on completion. */
+  syncProject(projectId: string): Promise<void>;
+  /** Current GitHub connection status (loaded at provider mount). */
+  githubConnected: boolean;
+  /** True while any project sync is in progress. */
+  isSyncing: boolean;
 }
 
 const DataMutationContext = createContext<DataMutationValue>(null!);
@@ -42,6 +52,10 @@ export function DataProvider({
   const [standaloneSessions, setStandaloneSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // M2.5 — GitHub connection status + sync tracking
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -63,6 +77,15 @@ export function DataProvider({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Load GitHub connection status on mount
+  useEffect(() => {
+    activeSource.getGithubStatus().then((status) => {
+      setGithubConnected(status.connected);
+    }).catch(() => {
+      // Silently fail — not critical for app boot
+    });
+  }, [activeSource]);
 
   const value: DataContextValue = {
     projects,
@@ -134,7 +157,37 @@ export function DataProvider({
         throw err;
       }
     },
-  }), [activeSource, loadData, standaloneSessions]);
+
+    // ---- M2.5 — project management + sync ----
+
+    async upsertProject(project: Project): Promise<Project> {
+      try {
+        const result = await activeSource.upsertProject(project);
+        await loadData();
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to upsert project");
+        throw err;
+      }
+    },
+
+    async syncProject(projectId: string): Promise<void> {
+      setSyncingProjectId(projectId);
+      try {
+        await activeSource.syncProject(projectId);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to sync project");
+        throw err;
+      } finally {
+        // Only clear if still the same project syncing (avoid race conditions)
+        setSyncingProjectId((prev) => (prev === projectId ? null : prev));
+      }
+    },
+
+    githubConnected,
+    isSyncing: syncingProjectId !== null,
+  }), [activeSource, loadData, standaloneSessions, githubConnected, syncingProjectId]);
 
   return (
     <DataContext.Provider value={value}>

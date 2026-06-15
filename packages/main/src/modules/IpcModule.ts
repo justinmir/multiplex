@@ -4,6 +4,7 @@ import { handle } from "../ipc/router.js";
 import { JsonRepository } from "../repo/JsonRepository.js";
 import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
 import { registerRepoWriteHandlers } from "../ipc/handlers/writes.js";
+import { registerProjectWriteHandlers } from "../ipc/handlers/project-writes.js";
 import { registerGitHubAuthHandlers } from "../ipc/handlers/github-auth.js";
 import { registerGitHubHandlers } from "../ipc/handlers/github.js";
 import { SyncService, setSyncService } from "../git/SyncService.js";
@@ -21,6 +22,9 @@ export function createIpcModule(): AppModule {
 
       // M1.5: Repository write handlers (persist to disk)
       registerRepoWriteHandlers(repo);
+
+      // M2.5: Project-level write handlers (create/update projects)
+      registerProjectWriteHandlers(repo);
 
       // M2.2: GitHub OAuth + token management handlers
       registerGitHubAuthHandlers();

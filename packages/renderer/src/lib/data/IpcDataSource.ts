@@ -43,4 +43,18 @@ export class IpcDataSource implements DataSource {
   async archiveSession(sessionId: string): Promise<void> {
     return call("sessions:archive", { sessionId });
   }
+
+  // ---- writes (M2.5 — project management + sync) ----
+
+  async upsertProject(project: Project): Promise<Project> {
+    return call("projects:upsert", { project });
+  }
+
+  async syncProject(projectId: string): Promise<Project | null> {
+    return call("projects:sync", { projectId });
+  }
+
+  async getGithubStatus(): Promise<{ connected: boolean }> {
+    return call("github:get-status", undefined as never);
+  }
 }

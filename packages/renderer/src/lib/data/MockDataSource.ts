@@ -40,4 +40,18 @@ export class MockDataSource implements DataSource {
   async archiveSession(_sessionId: string): Promise<void> {
     // no-op in mock
   }
+
+  // ---- writes (M2.5 — no-ops for mock data source) ----
+
+  async upsertProject(project: Project): Promise<Project> {
+    return project;
+  }
+
+  async syncProject(_projectId: string): Promise<Project | null> {
+    return null;
+  }
+
+  async getGithubStatus(): Promise<{ connected: boolean }> {
+    return { connected: false };
+  }
 }
