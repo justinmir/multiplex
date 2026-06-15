@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MoreHorizontal, Play, Star } from "lucide-react";
+import { MoreHorizontal, Play, Star, RefreshCw } from "lucide-react";
 import { Project, Reference } from "../data/mockData";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SessionsTab } from "./tabs/SessionsTab";
@@ -18,9 +18,11 @@ const tabs: { id: TabId; label: string; count?: (p: Project) => number }[] = [
 interface ProjectViewProps {
   project: Project;
   initialSessionId?: string | null;
+  onSync?: () => void;
+  isSyncing?: boolean;
 }
 
-export function ProjectView({ project, initialSessionId }: ProjectViewProps) {
+export function ProjectView({ project, initialSessionId, onSync, isSyncing }: ProjectViewProps) {
   const [tab, setTab] = useState<TabId>(initialSessionId ? "sessions" : "overview");
   const [sessionOpen, setSessionOpen] = useState<string | "new" | null>(initialSessionId ?? null);
   const [noteFocus, setNoteFocus] = useState<string | null>(null);
@@ -56,6 +58,18 @@ export function ProjectView({ project, initialSessionId }: ProjectViewProps) {
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            {onSync && (
+              <button
+                onClick={onSync}
+                disabled={isSyncing || false}
+                className={`flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[11.5px] text-foreground hover:bg-secondary ${
+                  isSyncing ? "opacity-60" : ""
+                }`}
+              >
+                <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Syncing..." : "Sync PRs"}
+              </button>
+            )}
             <button className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
               <Star className="h-3.5 w-3.5" />
             </button>

@@ -4,7 +4,7 @@ import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
 import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
-import { useDataMutations, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
+import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import type { Session, Reference } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 
@@ -42,6 +42,7 @@ export function AppShell() {
   const projects = useProjects();
   const dataSessions = useStandaloneSessions();
   const mutations = useDataMutations();
+  const { isSyncing } = useDataLoading();
   const [view, setView] = useState<View>("home");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [projectInitialSession, setProjectInitialSession] = useState<string | null>(null);
@@ -134,6 +135,7 @@ export function AppShell() {
         selectedSessionId={selectedSessionId}
         selectedProjectSessionId={selectedProjectSessionId}
         view={view}
+        githubConnected={mutations.githubConnected}
         onGoHome={() => setView("home")}
         onSelectProject={(id) => openProject(id, null)}
         onOpenProjectSession={(pid, sid) => openProject(pid, sid)}
@@ -155,7 +157,7 @@ export function AppShell() {
           />
         )}
         {view === "project" && project && (
-          <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} />
+          <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} onSync={() => mutations.syncProject(selectedProjectId)} isSyncing={isSyncing} />
         )}
         {view === "session" && session && (
           <TaskView

@@ -159,6 +159,64 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
         )}
       </section>
 
+      {/* Pull Requests */}
+      <section className="lg:col-span-3 rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div className="flex items-center gap-2">
+            <GitPullRequest className="h-3.5 w-3.5 text-muted-foreground" />
+            <h3 className="text-foreground">Pull Requests</h3>
+          </div>
+        </div>
+        {project.prs.length === 0 ? (
+          <div className="px-5 py-8 text-center text-[12.5px] text-muted-foreground">
+            No PRs synced yet — connect GitHub and run a sync to populate this view.
+          </div>
+        ) : (
+          <ul>
+            {project.prs.map((pr, i) => (
+              <li key={pr.id}>
+                <div className={`group flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-secondary/40 ${i < project.prs.length - 1 ? "border-b border-border/60" : ""}`}>
+                  {/* Mergeability badge */}
+                  <span className={`flex h-2 w-2 shrink-0 rounded-full ${
+                    pr.mergeable === 'clean' ? 'bg-green-500' :
+                    pr.mergeable === 'conflict' ? 'bg-red-500' :
+                    'bg-yellow-500/60'
+                  }`} />
+
+                  {/* PR info */}
+                  <span className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-[13px] text-foreground">{pr.title}</span>
+                      <span className="font-mono text-[10.5px] text-muted-foreground">#{pr.number}</span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 font-mono text-[10.5px] text-muted-foreground">
+                      <span>{pr.repo}/{pr.branch}</span>
+                      {pr.checks && (
+                        <>
+                          <span className="text-muted-foreground/40">&#8226;</span>
+                          <span className={pr.checks.failed > 0 ? 'text-red-400' : ''}>
+                            {pr.checks.passed} passed &#8226; {pr.checks.failed} failed &#8226; {pr.checks.pending} pending
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </span>
+
+                  {/* Status badge */}
+                  <span className={`rounded-sm px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide ${
+                    pr.status === 'merged' ? 'bg-purple-500/15 text-purple-400' :
+                    pr.status === 'draft' ? 'bg-gray-500/15 text-gray-400' :
+                    'bg-blue-500/15 text-blue-400'
+                  }`}>
+                    {pr.status}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {/* Activity */}
       <section className="lg:col-span-3 rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
