@@ -6,6 +6,7 @@ interface DataContextValue {
   projects: Project[];
   standaloneSessions: Session[];
   loading: boolean;
+  isSyncing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 }
@@ -91,6 +92,7 @@ export function DataProvider({
     projects,
     standaloneSessions,
     loading,
+    isSyncing: syncingProjectId !== null,
     error,
     refresh: loadData,
   };
@@ -221,10 +223,16 @@ export function useSession(id: string): Session | undefined {
 }
 
 /** Returns loading + error state for use in top-level UI (e.g. AppShell). */
-export function useDataLoading(): Pick<DataContextValue, "loading" | "error"> {
+export function useDataLoading(): Pick<DataContextValue, "loading" | "isSyncing" | "error"> {
   const ctx = useContext(DataContext);
   if (!ctx) throw new Error("useDataLoading must be used within DataProvider");
-  return { loading: ctx.loading, error: ctx.error };
+  return { loading: ctx.loading, isSyncing: ctx.isSyncing, error: ctx.error };
+}
+
+/** Returns sync state for use in top-level UI (e.g. AppShell sync button). */
+export function useSyncState(): { isSyncing: boolean } {
+  const mutations = useDataMutations();
+  return { isSyncing: mutations.isSyncing };
 }
 
 /** Access mutation methods for notes, references, and session metadata. */
