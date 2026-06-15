@@ -4,6 +4,7 @@ import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
 import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
+import { SettingsDialog } from "../app/components/SettingsDialog";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import type { Session, Reference, SessionMsg } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
@@ -49,6 +50,9 @@ export function AppShell() {
   const [sessions, setSessions] = useState<Session[]>(dataSessions);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [unread, setUnread] = useState<Set<string>>(new Set());
+
+  // M4.2 — Settings dialog state
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Initialize selected project and unread state once when data first loads
   useEffect(() => {
@@ -160,6 +164,7 @@ export function AppShell() {
         onArchiveSession={archiveSession}
         isProjectSessionUnread={(pid, sid) => unread.has(projectKey(pid, sid))}
         isStandaloneSessionUnread={(sid) => unread.has(standaloneKey(sid))}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="flex h-full min-w-0 flex-1">
         {view === "home" && (
@@ -193,6 +198,9 @@ export function AppShell() {
           />
         )}
       </main>
+
+      {/* M4.2 — Settings dialog */}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }
