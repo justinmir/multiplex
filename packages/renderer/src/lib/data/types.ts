@@ -14,6 +14,10 @@ export interface DataSource {
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   archiveSession(sessionId: string): Promise<void>;
 
+  // writes (M3.3 — session-scoped references)
+  upsertSessionReference(sessionId: string, reference: Reference): Promise<Reference>;
+  deleteSessionReference(sessionId: string, refId: string): Promise<void>;
+
   // writes (M3.1 — session CRUD)
   createSession(session: Session, projectId?: string): Promise<Session>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
