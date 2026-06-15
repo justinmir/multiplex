@@ -49,8 +49,19 @@ runs:
     # behind an allow-list and skips Electron's `postinstall`, so its platform
     # binary is never downloaded. The main/preload Vite configs introspect
     # versions via `npx electron`, and the boot smoke test launches the real
-    # app, so run Electron's installer explicitly. It is idempotent: a no-op
-    # when the binary is already present.
+    # app, so run Electron's installer explicitly.
+    #
+    # We clear any partial install first so Electron's `install.js` cannot
+    # short-circuit via its "already installed" check, force a fresh download,
+    # then assert the binary actually resolves. Without the assertion a failed
+    # install is silent and only surfaces later as a confusing "Electron failed
+    # to install correctly" error during the Vite build.
     - name: Ensure Electron binary is installed
-      run: node "$(node -p "require.resolve('electron/install.js')")"
       shell: bash
+      env:
+        ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+      run: |
+        set -euo pipefail
+        rm -rf node_modules/electron/dist node_modules/electron/path.txt
+        node node_modules/electron/install.js
+        node -e "const p = require('electron'); if (typeof p !== 'string') throw new Error('Electron binary did not install'); console.log('Electron binary: ' + p)"
