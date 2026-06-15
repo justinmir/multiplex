@@ -748,7 +748,7 @@ function Composer({ session, draft, setDraft, onSend }: { session: Session | nul
         <div className="rounded-lg border border-border bg-input-background focus-within:border-border-strong">
           <textarea
             value={draft} onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onSend?.(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend?.(); } }}
             placeholder={session ? "Reply to the agent…" : "Describe the task. The agent will plan, code, and open PRs across the repos it needs."}
             rows={3}
             className="w-full resize-none bg-transparent px-3.5 py-3 text-[13.5px] placeholder:text-muted-foreground/70 focus:outline-none"
@@ -766,7 +766,7 @@ function Composer({ session, draft, setDraft, onSend }: { session: Session | nul
             <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
               <Paperclip className="h-3 w-3" /> attach
             </button>
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground">⌘↵ to send</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">↵ to send · ⇧↵ newline</span>
             <button
               onClick={onSend}
               disabled={!draft.trim()}
