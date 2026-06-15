@@ -1,5 +1,5 @@
 import type { DataSource } from "./types.js";
-import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionMsg, SessionStatus } from "@app/core";
 import { call } from "../ipc/client.js";
 
 /** Fetches data from the main process via IPC (backed by JsonRepository → db.json). */
@@ -76,5 +76,19 @@ export class IpcDataSource implements DataSource {
 
   async getGithubStatus(): Promise<{ connected: boolean }> {
     return call("github:get-status", undefined as never);
+  }
+
+  // ---- writes (M3.4 — agent workflow foundation) ----
+
+  async addMessage(sessionId: string, message: SessionMsg): Promise<void> {
+    return call("sessions:add-message", { sessionId, message });
+  }
+
+  async startAgent(sessionId: string): Promise<void> {
+    return call("agents:start", { sessionId });
+  }
+
+  async stopAgent(sessionId: string): Promise<void> {
+    return call("agents:stop", { sessionId });
   }
 }

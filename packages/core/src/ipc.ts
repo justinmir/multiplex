@@ -1,4 +1,4 @@
-import type { CheckRun, Note, Project, PullRequest, Reference, Session, SessionStatus } from "./domain.js";
+import type { CheckRun, Note, Project, PullRequest, Reference, Session, SessionMsg, SessionStatus } from "./domain.js";
 import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
@@ -38,6 +38,11 @@ export interface IpcContract {
 
   // M2.5 — Project CRUD (github:get-status already exists in M2.2)
   "projects:upsert": { req: { project: Project }; res: Project };
+
+  // M3.4 — Agent workflow foundation (message streaming + agent execution stub)
+  "sessions:add-message": { req: { sessionId: string; message: SessionMsg }; res: void };
+  "agents:start": { req: { sessionId: string }; res: void };
+  "agents:stop": { req: { sessionId: string }; res: void };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];
