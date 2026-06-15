@@ -88,4 +88,10 @@ export class MockDataSource implements DataSource {
   async stopAgent(_sessionId: string): Promise<void> {
     // no-op in mock
   }
+
+  // ---- M4.2 — GitHub connect flow (stub) ----
+
+  async connectGitHub(): Promise<{ success: boolean }> {
+    return { success: false };
+  }
 }

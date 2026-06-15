@@ -91,4 +91,10 @@ export class IpcDataSource implements DataSource {
   async stopAgent(sessionId: string): Promise<void> {
     return call("agents:stop", { sessionId });
   }
+
+  // ---- M4.2 — GitHub connect flow ----
+
+  async connectGitHub(): Promise<{ success: boolean }> {
+    return call("github:connect", undefined as never);
+  }
 }
