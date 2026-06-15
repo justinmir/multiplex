@@ -5,7 +5,7 @@ import { HomeView } from "../app/components/HomeView";
 import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
-import type { Session, Reference } from "@app/core";
+import type { Session, Reference, SessionMsg } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 
 const projectKey = (pid: string, sid: string) => `p/${pid}/${sid}`;
@@ -93,6 +93,24 @@ export function AppShell() {
     await mutations.upsertSessionReference(sessionId, ref);
   };
 
+  // M3.4 — agent workflow foundation handlers
+  const sendMessageToSession = async (messageText: string) => {
+    if (!session) return;
+    const msg: SessionMsg = {
+      role: "user",
+      content: messageText,
+      ts: new Date().toISOString(),
+    };
+    await mutations.addMessage(session.id, msg);
+    // Trigger agent execution after persisting the user message
+    await mutations.startAgent(session.id);
+  };
+
+  const stopSessionAgent = async () => {
+    if (!session) return;
+    await mutations.stopAgent(session.id);
+  };
+
   const createSession = async (prompt: string) => {
     const id = `ss_${Date.now().toString(36)}`;
     const title = prompt.length > 60 ? prompt.slice(0, 60).trim() + "…" : prompt;
@@ -163,6 +181,8 @@ export function AppShell() {
             session={session}
             prs={sessionPRs}
             onAddReference={(r) => addReferenceToSession(session.id, r)}
+            onSendMessage={sendMessageToSession}
+            onStopAgent={stopSessionAgent}
             onClose={() => setView("home")}
           />
         )}

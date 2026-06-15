@@ -20,6 +20,10 @@ interface Props {
   onAddReference?: (r: Reference) => void;
   /** Called when the "Start session" button is pressed on the new-session page. */
   onStartSession?: (prompt: string) => void;
+  /** Called when user sends a message in an existing session. Receives the message text. */
+  onSendMessage?: (message: string) => void;
+  /** Called when user clicks the Stop button while agent is running. */
+  onStopAgent?: () => void;
   onClose: () => void;
   starterPrompts?: string[];
 }
@@ -28,7 +32,7 @@ type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 
 export function SessionDetail({
   projectName, backLabel = "Back", session, prs = [], references = [],
-  onAddReference, onStartSession, onClose, starterPrompts,
+  onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
 }: Props) {
   const hasPRs = prs.length > 0;
 
@@ -105,7 +109,7 @@ export function SessionDetail({
             {session.status === "running" && (
               <>
                 <span className="ml-1"><SessionStateIndicator status="running" size={14} /></span>
-                <button className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary">
+                <button onClick={onStopAgent} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary">
                   <Square className="h-3 w-3" /> Stop
                 </button>
               </>
@@ -129,10 +133,16 @@ export function SessionDetail({
             session={session}
             draft={draft}
             setDraft={setDraft}
-            onStart={() => {
+            onSend={() => {
               const v = draft.trim();
               if (!v) return;
-              onStartSession?.(v);
+              // For new sessions, delegate to onStartSession
+              if (!session) {
+                onStartSession?.(v);
+              } else {
+                // For existing sessions, send message text up to parent
+                onSendMessage?.(v);
+              }
               setDraft("");
             }}
           />
@@ -731,13 +741,14 @@ function NewSessionPane({ projectName, starterPrompts, draft, setDraft }: { proj
   );
 }
 
-function Composer({ session, draft, setDraft, onStart }: { session: Session | null; draft: string; setDraft: (v: string) => void; onStart?: () => void }) {
+function Composer({ session, draft, setDraft, onSend }: { session: Session | null; draft: string; setDraft: (v: string) => void; onSend?: () => void }) {
   return (
     <div className="border-t border-border bg-card/40 px-6 py-4">
       <div className="mx-auto max-w-3xl">
         <div className="rounded-lg border border-border bg-input-background focus-within:border-border-strong">
           <textarea
             value={draft} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onSend?.(); }}
             placeholder={session ? "Reply to the agent…" : "Describe the task. The agent will plan, code, and open PRs across the repos it needs."}
             rows={3}
             className="w-full resize-none bg-transparent px-3.5 py-3 text-[13.5px] placeholder:text-muted-foreground/70 focus:outline-none"
@@ -757,8 +768,8 @@ function Composer({ session, draft, setDraft, onStart }: { session: Session | nu
             </button>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">⌘↵ to send</span>
             <button
-              onClick={!session ? onStart : undefined}
-              disabled={!session && !draft.trim()}
+              onClick={onSend}
+              disabled={!draft.trim()}
               className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1 text-[12px] text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-3 w-3" />
