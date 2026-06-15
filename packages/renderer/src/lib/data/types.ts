@@ -1,4 +1,4 @@
-import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionMsg, SessionStatus } from "@app/core";
 
 export interface DataSource {
   // reads
@@ -26,4 +26,9 @@ export interface DataSource {
   upsertProject(project: Project): Promise<Project>;
   syncProject(projectId: string): Promise<Project | null>;
   getGithubStatus(): Promise<{ connected: boolean }>;
+
+  // writes (M3.4 — agent workflow foundation)
+  addMessage(sessionId: string, message: SessionMsg): Promise<void>;
+  startAgent(sessionId: string): Promise<void>;
+  stopAgent(sessionId: string): Promise<void>;
 }

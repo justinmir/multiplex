@@ -1,5 +1,5 @@
 import type { DataSource } from "./types.js";
-import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionMsg, SessionStatus } from "@app/core";
 import { projects as mockProjects, standaloneSessions as mockSessions } from "../../app/data/mockData.js";
 
 export class MockDataSource implements DataSource {
@@ -73,5 +73,19 @@ export class MockDataSource implements DataSource {
 
   async getGithubStatus(): Promise<{ connected: boolean }> {
     return { connected: false };
+  }
+
+  // ---- writes (M3.4 — no-ops for mock data source) ----
+
+  async addMessage(_sessionId: string, _message: SessionMsg): Promise<void> {
+    // no-op in mock
+  }
+
+  async startAgent(_sessionId: string): Promise<void> {
+    // no-op in mock
+  }
+
+  async stopAgent(_sessionId: string): Promise<void> {
+    // no-op in mock
   }
 }
