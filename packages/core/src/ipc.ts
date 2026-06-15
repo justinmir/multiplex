@@ -1,4 +1,5 @@
-import type { Project, Session } from "./domain.js";
+import type { Note, Project, Reference, Session } from "./domain.js";
+import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
 
@@ -11,6 +12,13 @@ export interface IpcContract {
   "projects:get": { req: { id: string }; res: Project | null };
   "sessions:list": { req: { projectId?: string | null }; res: Session[] };
   "sessions:get": { req: { id: string }; res: Session | null };
+
+  // M1.5 — write channels (persisted via JsonRepository)
+  "notes:upsert": { req: { projectId: string; note: Note }; res: Note };
+  "notes:delete": { req: { projectId: string; noteId: string }; res: void };
+  "refs:upsert": { req: { scope: RefScope; reference: Reference }; res: Reference };
+  "refs:delete": { req: { scope: RefScope; refId: string }; res: void };
+  "sessions:archive": { req: { sessionId: string }; res: void };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

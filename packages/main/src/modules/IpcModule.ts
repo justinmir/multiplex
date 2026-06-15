@@ -3,6 +3,7 @@ import type { ModuleContext } from "../ModuleContext.js";
 import { handle } from "../ipc/router.js";
 import { JsonRepository } from "../repo/JsonRepository.js";
 import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
+import { registerRepoWriteHandlers } from "../ipc/handlers/writes.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -13,6 +14,9 @@ export function createIpcModule(): AppModule {
       // M1.3: Repository read handlers — single JsonRepository instance wired via IPC
       const repo = new JsonRepository();
       registerRepoReadHandlers(repo);
+
+      // M1.5: Repository write handlers (persist to disk)
+      registerRepoWriteHandlers(repo);
     },
   };
 }
