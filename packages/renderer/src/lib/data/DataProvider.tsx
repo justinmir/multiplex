@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
+import { on } from "../ipc/client.js";
 import type { DataSource } from "./types.js";
 
 interface DataContextValue {
@@ -93,6 +94,14 @@ export function DataProvider({
       // Silently fail — not critical for app boot
     });
   }, [activeSource]);
+
+  // M3.2 — subscribe to data:changed push events from main process
+  useEffect(() => {
+    const handler = (_event: unknown) => {
+      loadData();
+    };
+    return on("data:changed", handler);
+  }, [loadData]);
 
   const value: DataContextValue = {
     projects,
