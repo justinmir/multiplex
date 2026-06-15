@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   Search, Plus, Settings, Home, ChevronRight, ChevronDown,
-  Archive, ArchiveRestore,
+  Archive, ArchiveRestore, GitPullRequest,
 } from "lucide-react";
 import { Project, Session, bucketForSession, sessionWindowLabels, SessionWindow } from "../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
@@ -13,6 +13,7 @@ interface Props {
   selectedSessionId: string | null;
   selectedProjectSessionId: string | null;
   view: "home" | "project" | "session" | "new-session";
+  githubConnected?: boolean;
   onGoHome: () => void;
   onSelectProject: (id: string) => void;
   onOpenProjectSession: (projectId: string, sessionId: string) => void;
@@ -26,7 +27,7 @@ interface Props {
 const windowOrder: SessionWindow[] = ["last_24h", "last_7d", "last_30d", "older", "archived"];
 
 export function ProjectsSidebar({
-  projects, standaloneSessions, selectedProjectId, selectedSessionId, selectedProjectSessionId, view,
+  projects, standaloneSessions, selectedProjectId, selectedSessionId, selectedProjectSessionId, view, githubConnected,
   onGoHome, onSelectProject, onOpenProjectSession, onSelectSession,
   onNewSession, onArchiveSession,
   isProjectSessionUnread, isStandaloneSessionUnread,
@@ -112,6 +113,11 @@ export function ProjectsSidebar({
                     className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2.5 text-left"
                   >
                     <span className="truncate text-[13px] text-foreground">{p.name}</span>
+                    {p.prs.length > 0 && (
+                      <span className="flex items-center gap-1 rounded-sm bg-secondary/60 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-foreground">
+                        <GitPullRequest className="h-2.5 w-2.5" />{p.openPRs} open
+                      </span>
+                    )}
                   </button>
                 </div>
 
@@ -256,6 +262,12 @@ export function ProjectsSidebar({
             <Settings className="h-3.5 w-3.5" />
           </button>
         </div>
+        {/* GitHub connection status */}
+        {githubConnected !== undefined && !githubConnected && (
+          <span className="mt-1.5 block rounded-sm bg-yellow-500/15 px-1.5 py-0.5 font-mono text-[9px] text-yellow-400">
+            Connect GitHub for live PRs
+          </span>
+        )}
       </div>
     </aside>
   );
