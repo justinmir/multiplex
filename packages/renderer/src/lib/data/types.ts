@@ -1,4 +1,4 @@
-import type { Note, Project, Reference, RefScope, Session } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 
 export interface DataSource {
   // reads
@@ -13,6 +13,10 @@ export interface DataSource {
   upsertReference(scope: RefScope, reference: Reference): Promise<Reference>;
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   archiveSession(sessionId: string): Promise<void>;
+
+  // writes (M3.1 — session CRUD)
+  createSession(session: Session, projectId?: string): Promise<Session>;
+  updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
 
   // writes (M2.5 — project management + sync)
   upsertProject(project: Project): Promise<Project>;

@@ -95,7 +95,7 @@ export function AppShell() {
     ));
   };
 
-  const createSession = (prompt: string) => {
+  const createSession = async (prompt: string) => {
     const id = `ss_${Date.now().toString(36)}`;
     const title = prompt.length > 60 ? prompt.slice(0, 60).trim() + "…" : prompt;
     const next: Session = {
@@ -111,7 +111,7 @@ export function AppShell() {
         { role: "agent", content: "Spinning up a fresh workspace and getting started.", ts: "just now" },
       ],
     };
-    setSessions((prev) => [next, ...prev]);
+    await mutations.createSession(next);
     openSession(id);
   };
 

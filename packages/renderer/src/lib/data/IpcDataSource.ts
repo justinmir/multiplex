@@ -1,5 +1,5 @@
 import type { DataSource } from "./types.js";
-import type { Note, Project, Reference, RefScope, Session } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 import { call } from "../ipc/client.js";
 
 /** Fetches data from the main process via IPC (backed by JsonRepository → db.json). */
@@ -42,6 +42,16 @@ export class IpcDataSource implements DataSource {
 
   async archiveSession(sessionId: string): Promise<void> {
     return call("sessions:archive", { sessionId });
+  }
+
+  // ---- writes (M3.1 — session CRUD) ----
+
+  async createSession(session: Session, projectId?: string): Promise<Session> {
+    return call("sessions:create", { session, projectId });
+  }
+
+  async updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void> {
+    return call("sessions:update-status", { sessionId, status });
   }
 
   // ---- writes (M2.5 — project management + sync) ----

@@ -1,4 +1,4 @@
-import type { CheckRun, Note, Project, PullRequest, Reference, Session } from "./domain.js";
+import type { CheckRun, Note, Project, PullRequest, Reference, Session, SessionStatus } from "./domain.js";
 import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
@@ -19,6 +19,10 @@ export interface IpcContract {
   "refs:upsert": { req: { scope: RefScope; reference: Reference }; res: Reference };
   "refs:delete": { req: { scope: RefScope; refId: string }; res: void };
   "sessions:archive": { req: { sessionId: string }; res: void };
+
+  // M3.1 — Session CRUD (create + status update)
+  "sessions:create": { req: { session: Session; projectId?: string }; res: Session };
+  "sessions:update-status": { req: { sessionId: string; status: SessionStatus }; res: void };
 
   // M2.2 — GitHub OAuth + token management
   "github:get-token": { req: void; res: string | null };
