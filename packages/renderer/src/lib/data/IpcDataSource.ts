@@ -1,11 +1,12 @@
 import type { DataSource } from "./types.js";
-import type { Project, Session } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session } from "@app/core";
 import { call } from "../ipc/client.js";
 
 /** Fetches data from the main process via IPC (backed by JsonRepository → db.json). */
 export class IpcDataSource implements DataSource {
+  // ---- reads ----
+
   async listProjects(): Promise<Project[]> {
-    // req type is `void` for this channel; TypeScript allows undefined as a stand-in
     return call("projects:list", undefined as never);
   }
 
@@ -14,11 +15,32 @@ export class IpcDataSource implements DataSource {
   }
 
   async listStandaloneSessions(): Promise<Session[]> {
-    // Pass projectId: null to filter only sessions not attached to any project
     return call("sessions:list", { projectId: null });
   }
 
   async getSession(id: string): Promise<Session | null> {
     return call("sessions:get", { id });
+  }
+
+  // ---- writes (M1.5) ----
+
+  async upsertNote(projectId: string, note: Note): Promise<Note> {
+    return call("notes:upsert", { projectId, note });
+  }
+
+  async deleteNote(projectId: string, noteId: string): Promise<void> {
+    return call("notes:delete", { projectId, noteId });
+  }
+
+  async upsertReference(scope: RefScope, reference: Reference): Promise<Reference> {
+    return call("refs:upsert", { scope, reference });
+  }
+
+  async deleteReference(scope: RefScope, refId: string): Promise<void> {
+    return call("refs:delete", { scope, refId });
+  }
+
+  async archiveSession(sessionId: string): Promise<void> {
+    return call("sessions:archive", { sessionId });
   }
 }
