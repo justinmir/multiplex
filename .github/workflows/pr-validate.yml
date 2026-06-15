@@ -1,0 +1,52 @@
+# Validates every pull request (and pushes to main) before merge:
+# typecheck + lint + build, then a headless boot smoke test of the real app.
+# Make the "Validate" job a required status check in branch protection so PRs
+# cannot merge until this passes (see AGENTS.md / repo settings).
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_NO_WARNINGS: 1
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+  npm_config_audit: false
+  npm_config_fund: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Composite action: starts Xvfb (sets DISPLAY), sets up Node, runs npm ci.
+      - name: Setup (Node + Xvfb + install)
+        uses: ./.github/actions/init-template-with-renderer
+
+      # typecheck (all workspaces) + lint (renderer) + build (all packages)
+      - name: Validate
+        run: npm run validate
+
+      # Launch the built Electron app headlessly; fails on any renderer
+      # console error. Build output already exists from `npm run validate`.
+      - name: Boot smoke test
+        run: node ./scripts/screenshot.mjs
+
+      - name: Upload app screenshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-screenshot
+          path: .artifacts/screenshot.png
+          if-no-files-found: ignore
