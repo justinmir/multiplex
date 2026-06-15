@@ -97,4 +97,14 @@ export class IpcDataSource implements DataSource {
   async connectGitHub(): Promise<{ success: boolean }> {
     return call("github:connect", undefined as never);
   }
+
+  // ---- M4.3 — PR merge + external links ----
+
+  async mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }> {
+    return call("prs:merge", { owner, repo, prNumber });
+  }
+
+  async openUrl(url: string): Promise<void> {
+    return call("app:open-url", { url });
+  }
 }

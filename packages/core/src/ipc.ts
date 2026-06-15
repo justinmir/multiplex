@@ -43,6 +43,10 @@ export interface IpcContract {
   "sessions:add-message": { req: { sessionId: string; message: SessionMsg }; res: void };
   "agents:start": { req: { sessionId: string }; res: void };
   "agents:stop": { req: { sessionId: string }; res: void };
+
+  // M4.3 — PR merge + external links
+  "prs:merge": { req: { owner: string; repo: string; prNumber: number }; res: { success: boolean } };
+  "app:open-url": { req: { url: string }; res: void };
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

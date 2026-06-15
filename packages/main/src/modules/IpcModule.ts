@@ -11,6 +11,7 @@ import { SyncService, setSyncService } from "../git/SyncService.js";
 import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
 import { registerSessionMessageHandlers } from "../ipc/handlers/session-messages.js";
+import { registerAppHandlers } from "../ipc/handlers/app.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -44,6 +45,9 @@ export function createIpcModule(): AppModule {
 
       // M3.4: Agent workflow foundation (message streaming + agent execution stub)
       registerSessionMessageHandlers(repo);
+
+      // M4.3: Application-level handlers (open URL in system browser)
+      registerAppHandlers();
     },
   };
 }
