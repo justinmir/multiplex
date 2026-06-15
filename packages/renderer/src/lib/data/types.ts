@@ -13,4 +13,9 @@ export interface DataSource {
   upsertReference(scope: RefScope, reference: Reference): Promise<Reference>;
   deleteReference(scope: RefScope, refId: string): Promise<void>;
   archiveSession(sessionId: string): Promise<void>;
+
+  // writes (M2.5 — project management + sync)
+  upsertProject(project: Project): Promise<Project>;
+  syncProject(projectId: string): Promise<Project | null>;
+  getGithubStatus(): Promise<{ connected: boolean }>;
 }
