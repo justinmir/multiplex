@@ -23,9 +23,14 @@ function isGitDir(dir: string): boolean {
 }
 
 export class LocalGitService implements GitService {
-  
+
   async getBranches(dir: string): Promise<LocalBranch[]> {
     if (!isGitDir(dir)) return [];
+
+    // Resolve the current HEAD branch name. symbolic-ref fails when HEAD is detached,
+    // in which case we use "" so no branch will be marked as isHead.
+    const headResult = runGit(dir, "symbolic-ref", "--short", "HEAD");
+    const headBranch = headResult.ok ? headResult.stdout.trim() : "";
 
     // List all local branches with their commit SHAs
     const result = runGit(dir, "branch", "-v", "--no-color");
@@ -36,13 +41,19 @@ export class LocalGitService implements GitService {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      // Format: "* main  abc123456 Commit message" or "  feature/xyz  def789012 Message"
-      const match = trimmed.match(/^(\*?)\s+(\S+)\s+([a-f0-9]+)\s+(.*)$/);
+      // Skip detached HEAD marker lines like "(HEAD detached at abc1234)"
+      if (trimmed.startsWith("(")) continue;
+
+      // After .trim() the leading whitespace is gone, so use \s* (zero or more) between
+      // optional "*" and the branch name.  Format examples:
+      //   "* main  abc123  Message"     (HEAD branch, trimmed to "* main ...")
+      //   "feature/xyz  def789  Message" (non-HEAD, trimmed removes leading spaces)
+      const match = trimmed.match(/^(\*?)\s*(\S+)\s+([a-f0-9]+)\s+(.*)$/);
       if (match) {
         branches.push({
           name: match[2],
           commitSha: match[3],
-          isHead: match[1] === "*",
+          isHead: headBranch === match[2],
         });
       }
     }
@@ -53,12 +64,14 @@ export class LocalGitService implements GitService {
   async getStatus(dir: string): Promise<RepoStatus> {
     if (!isGitDir(dir)) return { staged: 0, unstaged: 0, clean: true };
 
-    // Count staged files using --porcelain
+    // Count staged files (index vs HEAD)
     const stagedResult = runGit(dir, "diff", "--staged", "--name-only");
     const stagedFiles = stagedResult.stdout.trim().split("\n").filter(Boolean);
 
-    // Count unstaged files
-    const unstagedResult = runGit(dir, "status", "--porcelain");
+    // Count unstaged files only (working dir vs index).
+    // Using `git status --porcelain` would include staged entries too, double-counting
+    // any file that has both staged and unstaged changes.
+    const unstagedResult = runGit(dir, "diff", "--name-only");
     const unstagedFiles = unstagedResult.stdout.trim().split("\n").filter(Boolean);
 
     return {
