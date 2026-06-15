@@ -1,0 +1,641 @@
+export type ProjectStatus = "active" | "paused" | "shipped";
+export type PRStatus = "open" | "draft" | "merged" | "review" | "closed";
+export type SessionStatus =
+  | "running"
+  | "awaiting_input"
+  | "review_pending"
+  | "changes_requested"
+  | "mergeable_comments"
+  | "mergeable"
+  | "checks_failing"
+  | "merged"
+  | "completed"
+  | "failed"
+  | "idle";
+
+export type ReferenceKind = "pr" | "doc" | "link" | "meeting" | "todo" | "issue";
+
+export interface Reference {
+  id: string;
+  kind: ReferenceKind;
+  title: string;
+  source?: string;       // e.g. "github.com/acme/ingest#312", "Notion", "Linear"
+  url?: string;
+  summary?: string;      // one-line agent-extracted summary
+  addedAt: string;
+  addedBy?: string;
+}
+
+export interface FileChange {
+  path: string;
+  additions: number;
+  deletions: number;
+  hunk: string;
+  kind: "added" | "modified" | "deleted" | "renamed";
+}
+
+export interface ReviewComment {
+  id: string;
+  author: string;
+  kind: "review" | "inline" | "general";
+  verdict?: "approved" | "changes_requested" | "commented";
+  body: string;
+  path?: string;
+  line?: number;
+  ts: string;
+  resolved?: boolean;
+  replies?: { author: string; body: string; ts: string }[];
+}
+
+export interface CheckRun {
+  id: string;
+  name: string;
+  status: "success" | "failure" | "pending" | "skipped";
+  durationSec?: number;
+  conclusion?: string;
+  workflow?: string;
+  detail?: string;
+}
+
+export interface PullRequest {
+  id: string;
+  number: number;
+  title: string;
+  repo: string;
+  branch: string;
+  baseBranch?: string;
+  status: PRStatus;
+  mergeable?: "clean" | "blocked" | "conflict" | "behind";
+  reviewVerdict?: "pending" | "approved" | "changes_requested";
+  author: string;
+  additions: number;
+  deletions: number;
+  updatedAt: string;
+  checks: { passed: number; failed: number; pending: number };
+  files?: FileChange[];
+  comments?: ReviewComment[];
+  checkRuns?: CheckRun[];
+}
+
+export interface Workspace {
+  repo: string;
+  branch: string;
+  worktree?: string;
+}
+
+export interface SessionMsg {
+  role: "user" | "agent" | "tool";
+  content: string;
+  ts: string;
+}
+
+export interface Session {
+  id: string;
+  title: string;
+  /** The original prompt that initiated the session. */
+  prompt?: string;
+  status: SessionStatus;
+  model: string;
+  /** All repos/branches this session is working across. */
+  workspaces: Workspace[];
+  /** PRs opened by this session — may span multiple repos. */
+  linkedPRs?: { repo: string; number: number }[];
+  startedAt: string;
+  createdAtMs: number;
+  archived?: boolean;
+  durationMin: number;
+  tokens: number;
+  cost: number;
+  messages: SessionMsg[];
+  /** Optional per-session references the agent should consult. */
+  references?: Reference[];
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  body: string;
+  author: string;
+  updatedAt: string;
+  tags: string[];
+}
+
+export interface ActivityItem {
+  id: string;
+  kind: "pr" | "session" | "note" | "summary" | "ref";
+  text: string;
+  ts: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  /** Projects can span multiple repos. */
+  repos: string[];
+  status: ProjectStatus;
+  color: string;
+  progress: number;
+  openPRs: number;
+  activeSessions: number;
+  lastActivity: string;
+  prs: PullRequest[];
+  sessions: Session[];
+  notes: Note[];
+  references: Reference[];
+  activity: ActivityItem[];
+  summary: string;
+  nextSteps: string[];
+}
+
+/* ----- helpers ----- */
+
+const NOW = Date.now();
+const min = 60_000, hr = 3_600_000, day = 86_400_000;
+
+function ago(ms: number): string {
+  const d = NOW - ms;
+  if (d < hr) return `${Math.max(1, Math.round(d / min))}m ago`;
+  if (d < day) return `${Math.round(d / hr)}h ago`;
+  if (d < 7 * day) return `${Math.round(d / day)}d ago`;
+  return `${Math.round(d / (7 * day))}w ago`;
+}
+
+/* ----- standalone sessions (formerly "tasks") ----- */
+
+export const standaloneSessions: Session[] = [
+  {
+    id: "ss_changelog",
+    title: "Draft changelog for v2.4 release",
+    prompt: "Write a customer-facing changelog for v2.4 covering the new SSO flow, dashboard filters, and the webhook retry behavior.",
+    status: "running",
+    model: "claude-sonnet-4-6",
+    workspaces: [{ repo: "acme/web", branch: "agent/changelog-v2.4" }],
+    startedAt: ago(NOW - (NOW - 18 * min)),
+    createdAtMs: NOW - 18 * min,
+    durationMin: 18, tokens: 42_100, cost: 0.38,
+    messages: [
+      { role: "user", content: "Write a customer-facing changelog for v2.4 covering SSO, filters, and webhook retries.", ts: "18m ago" },
+      { role: "agent", content: "Pulled the 27 merged PRs since v2.3. Grouping by user-visible vs internal. Draft incoming.", ts: "12m ago" },
+    ],
+    references: [
+      { id: "r1", kind: "doc", title: "v2.3 changelog (last release)", source: "Notion", url: "#", addedAt: "18m ago", summary: "Format reference for headings and tone." },
+      { id: "r2", kind: "link", title: "Merged PRs since v2.3", source: "github.com/acme/web", url: "#", addedAt: "18m ago" },
+    ],
+  },
+  {
+    id: "ss_rename",
+    title: "Rename `getCwd` → `getCurrentWorkingDirectory`",
+    prompt: "Rename getCwd to getCurrentWorkingDirectory across the repo and update all call sites.",
+    status: "mergeable",
+    model: "claude-haiku-4-5-20251001",
+    workspaces: [{ repo: "acme/utils", branch: "agent/rename-getcwd" }],
+    linkedPRs: [{ repo: "acme/utils", number: 1421 }],
+    startedAt: ago(NOW - 2 * hr),
+    createdAtMs: NOW - 2 * hr,
+    durationMin: 4, tokens: 18_400, cost: 0.06,
+    messages: [
+      { role: "user", content: "Rename getCwd to getCurrentWorkingDirectory across the repo.", ts: "2h ago" },
+      { role: "agent", content: "Updated 23 call sites in 11 files. Opened PR #1421. Tests green, kai approved.", ts: "1h ago" },
+    ],
+  },
+  {
+    id: "ss_csv",
+    title: "Parse the attached CSV and email me top 5 outliers",
+    prompt: "Look at the attached metrics CSV and find the 5 biggest week-over-week outliers, then email me a short summary.",
+    status: "completed",
+    model: "claude-sonnet-4-6",
+    workspaces: [],
+    startedAt: ago(NOW - 22 * hr),
+    createdAtMs: NOW - 22 * hr,
+    durationMin: 6, tokens: 31_200, cost: 0.21,
+    messages: [
+      { role: "user", content: "Find 5 biggest WoW outliers in the metrics CSV and email me.", ts: "yesterday" },
+      { role: "agent", content: "Sent. Largest swing was 'checkout_started' (+42%) on Tuesday.", ts: "yesterday" },
+    ],
+  },
+  {
+    id: "ss_cross_repo",
+    title: "Add shared retry helper to ingest + ledger",
+    prompt: "Extract the retry-with-jitter helper into shared-utils and consume it from acme/ingest and acme/ledger.",
+    status: "review_pending",
+    model: "claude-opus-4-7",
+    workspaces: [
+      { repo: "acme/shared-utils", branch: "agent/retry-helper" },
+      { repo: "acme/ingest", branch: "agent/use-retry-helper" },
+      { repo: "acme/ledger", branch: "agent/use-retry-helper" },
+    ],
+    linkedPRs: [
+      { repo: "acme/shared-utils", number: 88 },
+      { repo: "acme/ingest", number: 491 },
+      { repo: "acme/ledger", number: 102 },
+    ],
+    startedAt: ago(NOW - 3 * day),
+    createdAtMs: NOW - 3 * day,
+    durationMin: 142, tokens: 612_400, cost: 6.82,
+    messages: [
+      { role: "user", content: "Extract retry-with-jitter into shared-utils and use it from ingest + ledger.", ts: "3d ago" },
+      { role: "agent", content: "Opened 3 coordinated PRs (#88 in shared-utils, #491 in ingest, #102 in ledger). Ledger PR is gated on shared-utils landing first.", ts: "3d ago" },
+    ],
+    references: [
+      { id: "r1", kind: "doc", title: "Resilience design doc", source: "Notion", url: "#", addedAt: "3d ago", summary: "Backoff strategy and jitter math." },
+    ],
+  },
+  {
+    id: "ss_design_review",
+    title: "Audit Stripe webhook handlers for idempotency",
+    prompt: "Review all Stripe webhook handlers across the codebase and flag any that aren't idempotent.",
+    status: "completed",
+    model: "claude-opus-4-7",
+    workspaces: [
+      { repo: "acme/ledger", branch: "agent/idempotency-audit" },
+      { repo: "acme/web", branch: "agent/idempotency-audit" },
+    ],
+    startedAt: ago(NOW - 11 * day),
+    createdAtMs: NOW - 11 * day,
+    durationMin: 38, tokens: 184_000, cost: 1.92,
+    messages: [
+      { role: "user", content: "Audit Stripe webhook handlers for idempotency issues.", ts: "11d ago" },
+      { role: "agent", content: "4 handlers flagged. Wrote findings to docs/audits/2026-06-stripe.md.", ts: "11d ago" },
+    ],
+  },
+  {
+    id: "ss_archived_1",
+    title: "Old experiment: try mistral on the eval harness",
+    prompt: "Run the eval harness with mistral-large and compare to claude-opus.",
+    status: "completed",
+    model: "claude-opus-4-7",
+    workspaces: [{ repo: "acme/search", branch: "agent/mistral-eval" }],
+    startedAt: ago(NOW - 22 * day),
+    createdAtMs: NOW - 22 * day,
+    archived: true,
+    durationMin: 24, tokens: 88_000, cost: 0.92,
+    messages: [],
+  },
+  {
+    id: "ss_archived_2",
+    title: "Dump of all TODOs across the monorepo",
+    prompt: "Find every TODO/FIXME in the codebase and group by directory.",
+    status: "completed",
+    model: "claude-haiku-4-5-20251001",
+    workspaces: [{ repo: "acme/web", branch: "main" }],
+    startedAt: ago(NOW - 40 * day),
+    createdAtMs: NOW - 40 * day,
+    archived: true,
+    durationMin: 3, tokens: 12_400, cost: 0.03,
+    messages: [],
+  },
+];
+
+/* ----- projects ----- */
+
+export const projects: Project[] = [
+  {
+    id: "p_ingest",
+    name: "Ingest Pipeline v2",
+    slug: "ingest-v2",
+    description: "Rewriting the event ingestion pipeline for 10x throughput and exactly-once semantics.",
+    repos: ["acme/ingest", "acme/shared-utils"],
+    status: "active",
+    color: "#d4a574",
+    progress: 62,
+    openPRs: 4,
+    activeSessions: 2,
+    lastActivity: "12m ago",
+    summary:
+      "Backpressure-aware writer is merged and stable in staging. The dedupe layer is the critical path — Maya's PR introduces a Redis-backed bloom filter; benchmarks show p99 within budget but memory footprint is 2x estimate. Recommend pairing on the eviction policy before review.",
+    nextSteps: [
+      "Review #482 — bloom filter memory ceiling",
+      "Backfill replay test against staging-prod mirror",
+      "Schedule SRE handoff for the cutover runbook",
+    ],
+    prs: [
+      {
+        id: "pr1", number: 482, title: "Bloom-filter dedupe layer", repo: "acme/ingest",
+        branch: "maya/dedupe-bloom", baseBranch: "main", status: "review",
+        mergeable: "blocked", reviewVerdict: "changes_requested",
+        author: "maya", additions: 612, deletions: 84, updatedAt: "2h ago",
+        checks: { passed: 18, failed: 1, pending: 2 },
+        files: [
+          { path: "src/dedupe/bloom.go", additions: 218, deletions: 0, kind: "added",
+            hunk: "+ func (b *Bloom) Add(key []byte) {\n+   for _, h := range b.hashes {\n+     idx := h(key) % b.size\n+     b.bits[idx/8] |= 1 << (idx % 8)\n+   }\n+ }" },
+          { path: "src/dedupe/eviction.go", additions: 142, deletions: 28, kind: "modified",
+            hunk: "-   if len(m.keys) > maxKeys {\n-     m.evictOldest()\n+   if m.pressure() > 0.85 {\n+     m.evictByGeneration(2)\n+   }" },
+          { path: "src/writer/pipeline.go", additions: 64, deletions: 12, kind: "modified",
+            hunk: " func (w *Writer) Write(b Batch) error {\n+  if w.dedupe.SeenAll(b.Keys()) {\n+    return nil\n+  }\n   return w.flush(b)\n }" },
+          { path: "src/dedupe/bloom_test.go", additions: 188, deletions: 0, kind: "added",
+            hunk: "+ func TestBloomFalsePositiveRate(t *testing.T) { ... }" },
+        ],
+        comments: [
+          { id: "c1", author: "ana", kind: "review", verdict: "changes_requested",
+            body: "Looks great overall but the eviction policy in eviction.go is going to thrash at 80%+ load. Can we use a generational sweep instead of dropping the oldest?",
+            ts: "3h ago" },
+          { id: "c2", author: "ana", kind: "inline", path: "src/dedupe/eviction.go", line: 47,
+            body: "This loop holds the write lock for the entire scan. Move the scan under a read lock and only upgrade for the actual eviction.",
+            ts: "3h ago",
+            replies: [{ author: "maya", body: "Good catch — splitting it in the next push.", ts: "1h ago" }],
+          },
+          { id: "c3", author: "dev", kind: "inline", path: "src/dedupe/bloom.go", line: 88,
+            body: "Nit: the hash mix here uses fnv but we use xxhash everywhere else. Worth unifying?",
+            ts: "2h ago" },
+          { id: "c4", author: "ana", kind: "inline", path: "src/writer/pipeline.go", line: 142,
+            body: "We should emit a metric here when SeenAll short-circuits — otherwise the dedupe ratio is invisible in prod.",
+            ts: "2h ago" },
+        ],
+        checkRuns: [
+          { id: "ck1", name: "build", status: "success", durationSec: 124, workflow: "ci.yml" },
+          { id: "ck2", name: "unit-tests", status: "success", durationSec: 248, workflow: "ci.yml" },
+          { id: "ck3", name: "integration-tests", status: "failure", durationSec: 612, workflow: "ci.yml",
+            detail: "TestBloomEvictionUnderLoad: expected p99 < 200ms, got 388ms" },
+          { id: "ck4", name: "benchmark", status: "pending", workflow: "bench.yml" },
+          { id: "ck5", name: "lint", status: "success", durationSec: 18, workflow: "ci.yml" },
+          { id: "ck6", name: "docs-preview", status: "pending", workflow: "docs.yml" },
+        ],
+      },
+      {
+        id: "pr2", number: 479, title: "Writer: backpressure on slow consumer", repo: "acme/ingest",
+        branch: "ana/writer-bp", baseBranch: "main", status: "merged",
+        mergeable: "clean", reviewVerdict: "approved",
+        author: "ana", additions: 244, deletions: 132, updatedAt: "yesterday",
+        checks: { passed: 21, failed: 0, pending: 0 },
+      },
+      {
+        id: "pr3", number: 485, title: "Replay harness scaffolding", repo: "acme/ingest",
+        branch: "agent/replay-scaffold", baseBranch: "main", status: "draft",
+        mergeable: "blocked", reviewVerdict: "pending",
+        author: "agent-04", additions: 318, deletions: 12, updatedAt: "23m ago",
+        checks: { passed: 14, failed: 0, pending: 4 },
+      },
+      {
+        id: "pr4", number: 487, title: "Metrics: dedupe hit rate exporter", repo: "acme/ingest",
+        branch: "agent/metrics-export", baseBranch: "main", status: "open",
+        mergeable: "clean", reviewVerdict: "pending",
+        author: "agent-04", additions: 96, deletions: 4, updatedAt: "12m ago",
+        checks: { passed: 19, failed: 0, pending: 0 },
+        files: [
+          { path: "src/metrics/dedupe.go", additions: 78, deletions: 0, kind: "added",
+            hunk: "+ var DedupeHits = prometheus.NewCounterVec(\n+   prometheus.CounterOpts{ Name: \"dedupe_hits_total\" },\n+   []string{\"partition\"},\n+ )" },
+          { path: "src/metrics/dedupe_test.go", additions: 18, deletions: 0, kind: "added", hunk: "+ // smoke test" },
+        ],
+        comments: [],
+        checkRuns: [
+          { id: "ck1", name: "build", status: "success", durationSec: 118, workflow: "ci.yml" },
+          { id: "ck2", name: "unit-tests", status: "success", durationSec: 232, workflow: "ci.yml" },
+          { id: "ck3", name: "lint", status: "success", durationSec: 16, workflow: "ci.yml" },
+        ],
+      },
+      {
+        id: "pr5", number: 488, title: "Bump tracing sample rate to 100% on staging", repo: "acme/ingest",
+        branch: "agent/tracing-sample", baseBranch: "main", status: "open",
+        mergeable: "clean", reviewVerdict: "approved",
+        author: "agent-04", additions: 6, deletions: 2, updatedAt: "1h ago",
+        checks: { passed: 21, failed: 0, pending: 0 },
+        files: [
+          { path: "config/staging.yaml", additions: 2, deletions: 2, kind: "modified",
+            hunk: "- tracing:\n-   sample_rate: 0.1\n+ tracing:\n+   sample_rate: 1.0" },
+        ],
+        comments: [
+          { id: "c1", author: "ana", kind: "review", verdict: "approved",
+            body: "LGTM — cost will tick up ~$140/mo, well within budget.", ts: "45m ago" },
+        ],
+        checkRuns: [
+          { id: "ck1", name: "build", status: "success", durationSec: 92, workflow: "ci.yml" },
+          { id: "ck2", name: "unit-tests", status: "success", durationSec: 210, workflow: "ci.yml" },
+        ],
+      },
+    ],
+    sessions: [
+      {
+        id: "s1",
+        title: "Investigate p99 spike under replay load",
+        status: "running",
+        model: "claude-opus-4-7",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/replay-investigate" }],
+        linkedPRs: [{ repo: "acme/ingest", number: 485 }],
+        startedAt: "12m ago",
+        createdAtMs: NOW - 12 * min,
+        durationMin: 12, tokens: 184_220, cost: 2.41,
+        messages: [
+          { role: "user", content: "Trace the p99 latency spike that appears after ~3min of replay traffic. Bisect on the writer batch size.", ts: "12m ago" },
+          { role: "agent", content: "Reproduced locally with replay-harness@HEAD. Spike correlates with GC pressure on the dedupe map. Running a bisect on `BATCH_SIZE` between 256 and 4096.", ts: "9m ago" },
+          { role: "tool", content: "bench: BATCH_SIZE=1024 → p99 142ms ✓ | BATCH_SIZE=2048 → p99 388ms ✗", ts: "4m ago" },
+          { role: "agent", content: "The cliff is between 1024 and 2048. Drafting a heap profile run to confirm map growth is the cause.", ts: "1m ago" },
+        ],
+      },
+      {
+        id: "s2",
+        title: "Draft metrics exporter for dedupe hit rate",
+        status: "review_pending",
+        model: "claude-sonnet-4-6",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/metrics-export" }],
+        linkedPRs: [{ repo: "acme/ingest", number: 487 }],
+        startedAt: "yesterday",
+        createdAtMs: NOW - day,
+        durationMin: 48, tokens: 92_104, cost: 0.84,
+        messages: [
+          { role: "user", content: "We need a Prometheus exporter for dedupe hits/misses, broken down by partition.", ts: "yesterday" },
+          { role: "agent", content: "Drafted PR #487 with a partition-keyed counter and a smoke test. Ready for review.", ts: "yesterday" },
+        ],
+      },
+      {
+        id: "s4",
+        title: "Fix dedupe map memory ceiling",
+        status: "changes_requested",
+        model: "claude-opus-4-7",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/dedupe-memory" }],
+        linkedPRs: [{ repo: "acme/ingest", number: 482 }],
+        startedAt: "yesterday",
+        createdAtMs: NOW - 26 * hr,
+        durationMin: 38, tokens: 142_300, cost: 1.62,
+        messages: [
+          { role: "user", content: "Maya's PR has memory 2x estimate. Investigate eviction policy.", ts: "yesterday" },
+          { role: "agent", content: "Reviewer left 4 comments on the eviction loop. Drafting follow-ups.", ts: "3h ago" },
+        ],
+      },
+      {
+        id: "s5",
+        title: "Bump tracing sample rate to 100% on staging",
+        status: "mergeable",
+        model: "claude-haiku-4-5-20251001",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/tracing-sample" }],
+        linkedPRs: [{ repo: "acme/ingest", number: 488 }],
+        startedAt: "4h ago",
+        createdAtMs: NOW - 4 * hr,
+        durationMin: 9, tokens: 24_800, cost: 0.11,
+        messages: [
+          { role: "user", content: "Set tracing sample rate to 100% on staging, document the cost impact.", ts: "4h ago" },
+          { role: "agent", content: "PR #488 approved by @ana, all checks green. Ready to merge.", ts: "1h ago" },
+        ],
+      },
+      {
+        id: "s6",
+        title: "Add canary deploy gate to release workflow",
+        status: "awaiting_input",
+        model: "claude-opus-4-7",
+        workspaces: [{ repo: "acme/ingest", branch: "agent/canary-gate" }],
+        startedAt: "2h ago",
+        createdAtMs: NOW - 2 * hr,
+        durationMin: 28, tokens: 78_400, cost: 0.92,
+        messages: [
+          { role: "user", content: "Add a canary gate before the prod step in release.yml.", ts: "2h ago" },
+          { role: "agent", content: "Two options: (a) hold-step with manual approval, (b) auto-promote on SLO probe. Which do you want?", ts: "30m ago" },
+        ],
+      },
+    ],
+    notes: [
+      { id: "n1", title: "Cutover runbook — draft", body: "Two-phase: shadow-write for 48h, then flip read path. SRE wants a kill switch keyed off feature flag `ingest_v2_read`.", author: "ana", updatedAt: "2d ago", tags: ["runbook", "sre"] },
+      { id: "n2", title: "Dedupe sizing math", body: "At 12k eps and 7d window: ~7.2B keys. Bloom @ 0.1% FPR → 12 GiB. Consider sharding by partition.", author: "maya", updatedAt: "5d ago", tags: ["design"] },
+      { id: "n3", title: "Open question — backfill ordering", body: "Do we guarantee per-key order on replay? Currently no. Need product sign-off.", author: "dev", updatedAt: "1w ago", tags: ["question", "blocked"] },
+    ],
+    references: [
+      { id: "ref1", kind: "doc", title: "Ingest v2 — design doc", source: "Notion", url: "#", addedAt: "3w ago", addedBy: "ana", summary: "End-to-end design including dedupe, ordering, and cutover plan." },
+      { id: "ref2", kind: "pr", title: "PR #312 — legacy ingest archival", source: "github.com/acme/ingest", url: "#", addedAt: "2w ago", addedBy: "dev", summary: "Reference for the v1 shape we're moving away from." },
+      { id: "ref3", kind: "meeting", title: "SRE sync — cutover plan", source: "Google Meet · 2026-06-08", addedAt: "1w ago", addedBy: "ana", summary: "SRE owns kill-switch wiring; cutover window 03:00-05:00 UTC." },
+      { id: "ref4", kind: "todo", title: "Confirm proration ordering with product", addedAt: "5d ago", addedBy: "dev", summary: "Open question from notes — needs product sign-off." },
+      { id: "ref5", kind: "link", title: "Bloom-filter sizing calculator", source: "hur.st", url: "#", addedAt: "1w ago", addedBy: "maya" },
+    ],
+    activity: [
+      { id: "a1", kind: "session", text: "Session started — Investigate p99 spike under replay load", ts: "12m ago" },
+      { id: "a2", kind: "pr", text: "PR #487 opened by agent-04 — Metrics: dedupe hit rate exporter", ts: "12m ago" },
+      { id: "a3", kind: "summary", text: "Daily summary generated — 3 PRs touched, 1 milestone advanced", ts: "1h ago" },
+      { id: "a4", kind: "pr", text: "PR #482 — Maya requested review from @ana, @dev", ts: "2h ago" },
+      { id: "a5", kind: "ref", text: "Reference added — SRE sync — cutover plan", ts: "1w ago" },
+      { id: "a6", kind: "pr", text: "PR #479 merged into main", ts: "yesterday" },
+      { id: "a7", kind: "note", text: "Note updated — Cutover runbook — draft", ts: "2d ago" },
+    ],
+  },
+  {
+    id: "p_billing",
+    name: "Billing Migration",
+    slug: "billing-mig",
+    description: "Move legacy billing off the monolith onto the new ledger service.",
+    repos: ["acme/ledger", "acme/web"],
+    status: "active",
+    color: "#7ec699",
+    progress: 28,
+    openPRs: 2,
+    activeSessions: 1,
+    lastActivity: "1h ago",
+    summary:
+      "Schema audit is complete. The hard problem remains backfilling historical invoices with the new tax calculation — finance has flagged that proration math differs in three edge cases.",
+    nextSteps: [
+      "Lock proration spec with finance (open since Tue)",
+      "Stand up shadow ledger in staging",
+      "Define rollback decision tree",
+    ],
+    prs: [
+      { id: "pr1", number: 94, title: "Ledger: idempotent write path", repo: "acme/ledger", branch: "kai/idempotent-writes", baseBranch: "main", status: "open", mergeable: "clean", reviewVerdict: "pending", author: "kai", additions: 388, deletions: 22, updatedAt: "1h ago", checks: { passed: 22, failed: 0, pending: 1 } },
+      {
+        id: "pr2", number: 96, title: "Tax calc parity tests", repo: "acme/ledger",
+        branch: "agent/tax-parity", baseBranch: "main", status: "draft",
+        mergeable: "blocked", reviewVerdict: "pending",
+        author: "agent-01", additions: 142, deletions: 0, updatedAt: "4h ago",
+        checks: { passed: 8, failed: 2, pending: 0 },
+        checkRuns: [
+          { id: "ck1", name: "build", status: "success", durationSec: 88, workflow: "ci.yml" },
+          { id: "ck2", name: "unit-tests", status: "failure", durationSec: 142, workflow: "ci.yml",
+            detail: "3 of 50 jurisdictions show > $0.01 drift" },
+          { id: "ck3", name: "integration-tests", status: "failure", durationSec: 412, workflow: "ci.yml",
+            detail: "Proration rounding mismatch" },
+        ],
+      },
+    ],
+    sessions: [
+      {
+        id: "s1",
+        title: "Build parity test suite for tax calc",
+        status: "checks_failing",
+        model: "claude-sonnet-4-6",
+        workspaces: [{ repo: "acme/ledger", branch: "agent/tax-parity" }],
+        linkedPRs: [{ repo: "acme/ledger", number: 96 }],
+        startedAt: "1h ago",
+        createdAtMs: NOW - hr,
+        durationMin: 64, tokens: 218_400, cost: 1.92,
+        messages: [
+          { role: "user", content: "Generate parity tests comparing legacy tax output vs new calculator across 2024 invoices.", ts: "1h ago" },
+          { role: "agent", content: "Sampling 5000 invoices stratified by jurisdiction. 3 of 50 jurisdictions show drift > $0.01.", ts: "32m ago" },
+        ],
+      },
+    ],
+    notes: [
+      { id: "n1", title: "Proration edge cases", body: "Mid-cycle upgrades during a grace period: legacy rounds up to whole days, new rounds half-up at the hour. Confirm with finance.", author: "jess", updatedAt: "3d ago", tags: ["finance", "question"] },
+    ],
+    references: [
+      { id: "ref1", kind: "doc", title: "Tax calc spec (finance)", source: "Google Docs", url: "#", addedAt: "2w ago", addedBy: "jess", summary: "Authoritative spec for tax math — finance team owns." },
+      { id: "ref2", kind: "issue", title: "FIN-481 — Proration edge cases", source: "Linear", url: "#", addedAt: "3d ago", addedBy: "jess" },
+    ],
+    activity: [
+      { id: "a1", kind: "session", text: "Session started — Build parity test suite", ts: "1h ago" },
+      { id: "a2", kind: "pr", text: "PR #94 opened — Ledger: idempotent write path", ts: "1h ago" },
+    ],
+  },
+  {
+    id: "p_search",
+    name: "Search Relevance Tuning",
+    slug: "search-rel",
+    description: "Iterating on the lexical + semantic blend and onboarding new evaluators.",
+    repos: ["acme/search"],
+    status: "paused",
+    color: "#6bb4d8",
+    progress: 81,
+    openPRs: 1,
+    activeSessions: 0,
+    lastActivity: "4d ago",
+    summary:
+      "Paused pending feedback from the eval cohort. Last run showed +6.4% NDCG@10 on the long-tail set but a -2.1% regression on navigational queries.",
+    nextSteps: ["Resume after eval cohort feedback", "Investigate navigational regression"],
+    prs: [
+      { id: "pr1", number: 211, title: "Blend weights: long-tail recall boost", repo: "acme/search", branch: "rin/blend-longtail", baseBranch: "main", status: "review", mergeable: "clean", reviewVerdict: "pending", author: "rin", additions: 84, deletions: 22, updatedAt: "4d ago", checks: { passed: 11, failed: 0, pending: 0 } },
+    ],
+    sessions: [],
+    notes: [
+      { id: "n1", title: "Navigational regression hypothesis", body: "Likely from down-weighting exact-title matches in the blend.", author: "rin", updatedAt: "4d ago", tags: ["hypothesis"] },
+    ],
+    references: [
+      { id: "ref1", kind: "doc", title: "Eval cohort study plan", source: "Notion", url: "#", addedAt: "2w ago", addedBy: "rin" },
+    ],
+    activity: [{ id: "a1", kind: "summary", text: "Project paused pending eval feedback", ts: "4d ago" }],
+  },
+  {
+    id: "p_onboard",
+    name: "Onboarding Redesign",
+    slug: "onboarding",
+    description: "First-run experience: cut from 11 steps to 4 and improve activation.",
+    repos: ["acme/web"],
+    status: "shipped",
+    color: "#c678dd",
+    progress: 100,
+    openPRs: 0,
+    activeSessions: 0,
+    lastActivity: "2w ago",
+    summary: "Shipped to 100%. Activation up 18.4% week-over-week.",
+    nextSteps: ["Close out follow-up tickets", "Schedule retro"],
+    prs: [],
+    sessions: [],
+    notes: [],
+    references: [],
+    activity: [{ id: "a1", kind: "summary", text: "Rollout complete — +18.4% activation", ts: "2w ago" }],
+  },
+];
+
+/* ----- time-window bucketing for standalone sessions ----- */
+
+export type SessionWindow = "last_24h" | "last_7d" | "last_30d" | "older" | "archived";
+
+export function bucketForSession(s: Session, now: number = Date.now()): SessionWindow {
+  if (s.archived) return "archived";
+  const d = now - s.createdAtMs;
+  if (d <= day) return "last_24h";
+  if (d <= 7 * day) return "last_7d";
+  if (d <= 30 * day) return "last_30d";
+  return "older";
+}
+
+export const sessionWindowLabels: Record<SessionWindow, string> = {
+  last_24h: "Last 24 hours",
+  last_7d: "Last 7 days",
+  last_30d: "Last 30 days",
+  older: "Older",
+  archived: "Archived",
+};
