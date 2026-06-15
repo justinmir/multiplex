@@ -22,6 +22,8 @@ interface Props {
   onArchiveSession: (id: string, archived: boolean) => void;
   isProjectSessionUnread: (projectId: string, sessionId: string) => boolean;
   isStandaloneSessionUnread: (sessionId: string) => boolean;
+  /** M4.2 — callback to open the Settings dialog */
+  onOpenSettings: () => void;
 }
 
 const windowOrder: SessionWindow[] = ["last_24h", "last_7d", "last_30d", "older", "archived"];
@@ -31,6 +33,7 @@ export function ProjectsSidebar({
   onGoHome, onSelectProject, onOpenProjectSession, onSelectSession,
   onNewSession, onArchiveSession,
   isProjectSessionUnread, isStandaloneSessionUnread,
+  onOpenSettings,
 }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({
     [selectedProjectId]: true,
@@ -258,15 +261,21 @@ export function ProjectsSidebar({
             <div className="truncate text-[12px] text-foreground">Alex Stern</div>
             <div className="truncate font-mono text-[10px] text-muted-foreground">alex@acme.dev</div>
           </div>
-          <button className="rounded-sm p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
+          <button
+            onClick={onOpenSettings}
+            className="rounded-sm p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
             <Settings className="h-3.5 w-3.5" />
           </button>
         </div>
         {/* GitHub connection status */}
         {githubConnected !== undefined && !githubConnected && (
-          <span className="mt-1.5 block rounded-sm bg-yellow-500/15 px-1.5 py-0.5 font-mono text-[9px] text-yellow-400">
+          <button
+            onClick={onOpenSettings}
+            className="mt-1.5 block w-full rounded-sm bg-yellow-500/15 px-1.5 py-0.5 font-mono text-[9px] text-yellow-400 hover:bg-yellow-500/25"
+          >
             Connect GitHub for live PRs
-          </span>
+          </button>
         )}
       </div>
     </aside>

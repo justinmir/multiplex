@@ -125,6 +125,7 @@ export default function App() {
         onArchiveSession={archiveSession}
         isProjectSessionUnread={(pid, sid) => unread.has(projectKey(pid, sid))}
         isStandaloneSessionUnread={(sid) => unread.has(standaloneKey(sid))}
+        onOpenSettings={() => {}}
       />
       <main className="flex h-full min-w-0 flex-1">
         {view === "home" && (

@@ -55,6 +55,10 @@ interface DataMutationValue {
   startAgent(sessionId: string): Promise<void>;
   /** Stop agent execution — optimistic status change to completed, then persist. */
   stopAgent(sessionId: string): Promise<void>;
+
+  // M4.2 — GitHub connect flow
+  /** Initiate GitHub OAuth connection; refreshes data on completion. */
+  connectGitHub(): Promise<{ success: boolean }>;
 }
 
 const DataMutationContext = createContext<DataMutationValue>(null!);
@@ -308,6 +312,23 @@ export function DataProvider({
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
         setError(err instanceof Error ? err.message : "Failed to stop agent");
+        throw err;
+      }
+    },
+
+    /** M4.2 — Initiate GitHub OAuth connection, then refresh all data including status. */
+    async connectGitHub(): Promise<{ success: boolean }> {
+      try {
+        const result = await activeSource.connectGitHub();
+        // Refresh GitHub connection status after connect attempt
+        activeSource.getGithubStatus().then((status) => {
+          setGithubConnected(status.connected);
+        }).catch(() => {
+          // Silently fail — not critical
+        });
+        return result;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to connect GitHub");
         throw err;
       }
     },
