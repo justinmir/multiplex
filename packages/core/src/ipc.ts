@@ -50,6 +50,20 @@ export interface IpcContract {
 
   // M6.3 — Global search (future-proofing for server-side search)
   "search:query": { req: { q: string }; res: Array<{ kind: "project" | "session" | "pr"; id: string; title: string; subtitle?: string }> };
+
+  // M6.4 — Settings surface (consolidate)
+  "settings:get": { req: void; res: AppSettingsData };
+  "settings:set": { req: Partial<AppSettingsData>; res: AppSettingsData };
+}
+
+export interface AppSettingsData {
+  harnessId?: "mock" | "opencode";
+  defaultModel?: string;
+  anthropicApiKey?: string;
+  githubToken?: string;
+  repoRoots: Array<{ name: string; root: string }>;
+  intelligenceEnabled: boolean;
+  autoSynthesizeOnActivity: boolean;
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

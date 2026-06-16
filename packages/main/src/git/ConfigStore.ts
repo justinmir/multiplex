@@ -1,29 +1,20 @@
-import Store from "electron-store";
-
-export interface AppConfig {
-  githubToken?: string;
-}
+import { getAppSettings } from "../settings/AppSettings.js";
 
 class ConfigStoreImpl {
-  readonly #store = new Store<AppConfig>({
-    name: "multiplex-config",
-    fileExtension: "json",
-  });
-
   getGitHubToken(): string | null {
-    return this.#store.get("githubToken") ?? null;
+    return getAppSettings().get().githubToken ?? null;
   }
 
   setGitHubToken(token: string): void {
-    this.#store.set("githubToken", token);
+    getAppSettings().set({ githubToken: token });
   }
 
   clearGitHubToken(): void {
-    this.#store.delete("githubToken");
+    getAppSettings().set({ githubToken: undefined });
   }
 
   isGitHubConnected(): boolean {
-    return !!this.#store.get("githubToken");
+    return !!getAppSettings().get().githubToken;
   }
 }
 

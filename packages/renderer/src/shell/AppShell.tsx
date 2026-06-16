@@ -4,7 +4,7 @@ import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
 import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
-import { SettingsDialog } from "../app/components/SettingsDialog";
+import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
@@ -240,8 +240,8 @@ export function AppShell() {
         )}
       </main>
 
-      {/* M4.2 — Settings dialog */}
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {/* M6.4 — Consolidated settings panel */}
+      <SettingsPanel open={settingsOpen} onOpenChange={(open) => setSettingsOpen(open)} />
 
       {/* M5.2 — Create project dialog */}
       <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} />

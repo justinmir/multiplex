@@ -12,6 +12,7 @@ import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
 import { registerSessionMessageHandlers } from "../ipc/handlers/session-messages.js";
 import { registerAppHandlers } from "../ipc/handlers/app.js";
+import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -48,6 +49,9 @@ export function createIpcModule(): AppModule {
 
       // M4.3: Application-level handlers (open URL in system browser)
       registerAppHandlers();
+
+      // M6.4: Settings surface (consolidate) — harness, tokens, repos, intelligence
+      registerSettingsHandlers();
     },
   };
 }
