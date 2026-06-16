@@ -24,6 +24,8 @@ interface Props {
   isStandaloneSessionUnread: (sessionId: string) => boolean;
   /** M4.2 — callback to open the Settings dialog */
   onOpenSettings: () => void;
+  /** M5.2 — callback to open the Create Project dialog */
+  onOpenCreateProject?: () => void;
 }
 
 const windowOrder: SessionWindow[] = ["last_24h", "last_7d", "last_30d", "older", "archived"];
@@ -34,6 +36,7 @@ export function ProjectsSidebar({
   onNewSession, onArchiveSession,
   isProjectSessionUnread, isStandaloneSessionUnread,
   onOpenSettings,
+  onOpenCreateProject,
 }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({
     [selectedProjectId]: true,
@@ -92,7 +95,11 @@ export function ProjectsSidebar({
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             Projects
           </span>
-          <button className="rounded-sm p-0.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
+          <button
+            onClick={onOpenCreateProject}
+            className="rounded-sm p-0.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            title="New project"
+          >
             <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
