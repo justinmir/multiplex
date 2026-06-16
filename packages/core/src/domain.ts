@@ -98,8 +98,8 @@ export interface Session {
   model: string;
   /** All repos/branches this session is working across. */
   workspaces: Workspace[];
-  /** PRs opened by this session — may span multiple repos. */
-  linkedPRs?: { repo: string; number: number }[];
+  /** Full PR objects opened by this session — signals drive derived status. */
+  linkedPRs?: PullRequest[];
   startedAt: string;
   createdAtMs: number;
   archived?: boolean;

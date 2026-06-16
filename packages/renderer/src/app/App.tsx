@@ -106,11 +106,7 @@ export default function App() {
   };
 
   // Resolve PRs for the current standalone session against any project that hosts a matching repo
-  const sessionPRs = session?.linkedPRs
-    ? session.linkedPRs
-        .map((lp) => projects.flatMap((p) => p.prs).find((pr) => pr.repo === lp.repo && pr.number === lp.number))
-        .filter((p): p is NonNullable<typeof p> => !!p)
-    : [];
+  const sessionPRs = session?.linkedPRs ?? [];
 
   // Determine if we're inside a project session view (for sidebar highlight)
   const selectedProjectSessionId = view === "project" ? projectInitialSession : null;
