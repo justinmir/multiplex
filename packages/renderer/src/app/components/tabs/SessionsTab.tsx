@@ -7,9 +7,11 @@ interface Props {
   project: Project;
   openId: string | "new" | null;
   onOpen: (id: string | "new" | null) => void;
+  /** Called when the user starts a new session from within this tab. */
+  onStartSession?: (prompt: string) => void;
 }
 
-export function SessionsTab({ project, openId, onOpen }: Props) {
+export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) {
   const close = () => onOpen(null);
 
   if (openId === "new") {
@@ -19,6 +21,7 @@ export function SessionsTab({ project, openId, onOpen }: Props) {
         backLabel="All sessions"
         session={null}
         references={project.references}
+        onStartSession={onStartSession}
         onClose={close}
       />
     );
