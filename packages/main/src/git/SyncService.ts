@@ -1,5 +1,5 @@
 import type { ActivityItem, PullRequest, Project } from "@app/core";
-import type { JsonRepository } from "../repo/JsonRepository.js";
+import type { Repository } from "@app/core";
 import { configStore } from "./ConfigStore.js";
 import { githubClient } from "./GitHubClient.js";
 
@@ -7,9 +7,9 @@ import { githubClient } from "./GitHubClient.js";
  * SyncService fetches real GitHub PR data for project repos and merges into local store.
  */
 export class SyncService {
-  readonly #repo: JsonRepository;
+  readonly #repo: Repository;
   
-  constructor(repo: JsonRepository) {
+  constructor(repo: Repository) {
     this.#repo = repo;
   }
 

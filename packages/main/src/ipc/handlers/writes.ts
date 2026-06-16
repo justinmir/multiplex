@@ -1,6 +1,6 @@
 import { handle } from "../router.js";
 import { emit } from "../emit.js";
-import type { JsonRepository } from "../../repo/JsonRepository.js";
+import type { Repository } from "@app/core";
 import type { ActivityItem } from "@app/core";
 import { getIntelligenceService } from "../../intelligence/service.js";
 
@@ -9,8 +9,8 @@ function activityId(): string {
   return `a_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 }
 
-/** Register all repository write IPC handlers against a shared JsonRepository. */
-export function registerRepoWriteHandlers(repo: JsonRepository) {
+/** Register all repository write IPC handlers against a shared Repository. */
+export function registerRepoWriteHandlers(repo: Repository) {
   // Notes — append activity on create/update/delete
   handle("notes:upsert", async (req) => {
     const note = await repo.upsertNote(req.projectId, req.note);

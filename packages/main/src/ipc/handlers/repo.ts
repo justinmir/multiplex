@@ -1,9 +1,9 @@
 import { handle } from "../router.js";
-import type { JsonRepository } from "../../repo/JsonRepository.js";
+import type { Repository } from "@app/core";
 import { deriveProjectFields } from "../../repo/derive.js";
 
-/** Register all repository read IPC handlers against a shared JsonRepository. */
-export function registerRepoReadHandlers(repo: JsonRepository) {
+/** Register all repository read IPC handlers against a shared Repository. */
+export function registerRepoReadHandlers(repo: Repository) {
   handle("projects:list", () =>
     repo.listProjects().then((projects) => projects.map(deriveProjectFields)),
   );

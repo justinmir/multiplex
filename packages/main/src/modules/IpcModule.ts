@@ -1,5 +1,6 @@
 import type { AppModule } from "../AppModule.js";
 import type { ModuleContext } from "../ModuleContext.js";
+import type { Repository } from "@app/core";
 import { handle } from "../ipc/router.js";
 import { JsonRepository } from "../repo/JsonRepository.js";
 import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
@@ -38,8 +39,26 @@ export function createIpcModule(): AppModule {
       // M0.4: app:ping handler
       handle("app:ping", (req) => ({ value: req.value, ts: Date.now() }));
 
-      // M1.3: Repository read handlers — single JsonRepository instance wired via IPC
-      const repo = new JsonRepository();
+      // M1.3 / M7.2: Repository — select the persistence backend. SQLite is
+      // opt-in (Settings or MULTIPLEX_DB=sqlite); the module (and its native
+      // dependency) is only loaded when chosen, so the default JSON path and
+      // boot never touch better-sqlite3.
+      const settings = getAppSettings();
+      const backend = process.env.MULTIPLEX_DB ?? settings.get().repoBackend ?? "json";
+      let repo: Repository;
+      if (backend === "sqlite") {
+        try {
+          const { SqliteRepository } = await import("../repo/SqliteRepository.js");
+          const { SQLITE_PATH, DB_PATH } = await import("../repo/paths.js");
+          repo = new SqliteRepository(SQLITE_PATH, DB_PATH);
+          console.log("[IpcModule] using SQLite repository");
+        } catch (err) {
+          console.error("[IpcModule] SQLite backend failed to load, falling back to JSON:", err);
+          repo = new JsonRepository();
+        }
+      } else {
+        repo = new JsonRepository();
+      }
       registerRepoReadHandlers(repo);
 
       // M1.5: Repository write handlers (persist to disk)
@@ -64,7 +83,6 @@ export function createIpcModule(): AppModule {
 
       // M-A4: Register built-in harnesses and create the session runtime
       registerBuiltInHarnesses();
-      const settings = getAppSettings();
       const workspaceManager = new WorkspaceManager(gitService, repoRegistry, sessionsDir());
       const runtime = new SessionRuntime(
         repo,

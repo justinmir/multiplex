@@ -251,6 +251,26 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           )}
         </div>
 
+        {/* Storage Section (M7.2) */}
+        <div className="space-y-2 py-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Storage</h3>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="backend-select">Persistence backend</Label>
+            <select
+              id="backend-select"
+              value={settings.repoBackend ?? "json"}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => save({ repoBackend: e.target.value as "json" | "sqlite" })}
+              className="bg-background border rounded px-2 py-1 text-sm"
+            >
+              <option value="json">JSON file (default)</option>
+              <option value="sqlite">SQLite</option>
+            </select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Takes effect on restart. Switching to SQLite migrates your existing data once (db.json is backed up).
+          </p>
+        </div>
+
         {/* Repo Catalog Section */}
         <RepoCatalogSection />
       </DialogContent>

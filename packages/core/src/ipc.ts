@@ -88,6 +88,8 @@ export interface IpcContract {
 export interface AppSettingsData {
   harnessId?: "mock" | "opencode";
   defaultModel?: string;
+  /** Persistence backend (takes effect on restart). Default "json". */
+  repoBackend?: "json" | "sqlite";
   anthropicApiKey?: string;
   githubToken?: string;
   repoRoots: Array<{ name: string; root: string }>;

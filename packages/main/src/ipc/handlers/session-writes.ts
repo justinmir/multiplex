@@ -1,11 +1,11 @@
 import { handle } from "../router.js";
 import { emit } from "../emit.js";
-import type { JsonRepository } from "../../repo/JsonRepository.js";
+import type { Repository } from "@app/core";
 import type { ActivityItem, Session, SessionStatus } from "@app/core";
 import { deriveSessionStatus } from "../../session/deriveStatus.js";
 
 /** Apply derived status after a session upsert; patch + re-upsert if it changed. */
-async function applyDerived(repo: JsonRepository, updated: Session, projectId: string | null) {
+async function applyDerived(repo: Repository, updated: Session, projectId: string | null) {
   const derived = deriveSessionStatus(updated);
   if (derived !== updated.status) {
     const patched = await repo.upsertSession({ ...updated, status: derived }, projectId);
@@ -22,7 +22,7 @@ function activityId(): string {
 }
 
 /** Find the project that contains a given session (by checking each project's sessions array). */
-async function findSessionProject(repo: JsonRepository, sessionId: string): Promise<string | null> {
+async function findSessionProject(repo: Repository, sessionId: string): Promise<string | null> {
   const projects = await repo.listProjects();
   for (const p of projects) {
     if (p.sessions.some((s: Session) => s.id === sessionId)) {
@@ -33,7 +33,7 @@ async function findSessionProject(repo: JsonRepository, sessionId: string): Prom
 }
 
 /** Register session CRUD IPC handlers (create + status update). */
-export function registerSessionWriteHandlers(repo: JsonRepository) {
+export function registerSessionWriteHandlers(repo: Repository) {
   // Create a new standalone session — persisted via upsertSession with null projectId
   handle("sessions:create", async (req) => {
     const projectId = req.projectId ?? null;
