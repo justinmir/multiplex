@@ -2,6 +2,15 @@ import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { JsonRepository } from "../../repo/JsonRepository.js";
 import type { Session, SessionMsg } from "@app/core";
+import { deriveSessionStatus } from "../../session/deriveStatus.js";
+
+/** Apply derived status after a session upsert; patch + emit if it changed. */
+async function applyDerived(repo: JsonRepository, updated: Session) {
+  const derived = deriveSessionStatus(updated);
+  if (derived !== updated.status) {
+    await repo.upsertSession({ ...updated, status: derived }, null);
+  }
+}
 
 /** Register session message + agent workflow IPC handlers (M3.4). */
 export function registerSessionMessageHandlers(repo: JsonRepository) {
@@ -12,8 +21,9 @@ export function registerSessionMessageHandlers(repo: JsonRepository) {
       throw new Error(`Session not found: ${req.sessionId}`);
     }
 
-    const updated: Session = { ...existing, messages: [...existing.messages, req.message] };
+    let updated: Session = { ...existing, messages: [...existing.messages, req.message] };
     await repo.upsertSession(updated, null);
+    await applyDerived(repo, updated);
 
     emit("data:changed", { kind: "session" });
   });
@@ -28,6 +38,7 @@ export function registerSessionMessageHandlers(repo: JsonRepository) {
     // Transition to running
     let updated: Session = { ...existing, status: "running" };
     await repo.upsertSession(updated, null);
+    await applyDerived(repo, updated);
     emit("data:changed", { kind: "session" });
 
     // Simulate agent response after delay (STUB — real agent integration replaces this)
@@ -43,6 +54,7 @@ export function registerSessionMessageHandlers(repo: JsonRepository) {
 
       updated = { ...current, messages: [...current.messages, agentMsg], status: "completed" };
       await repo.upsertSession(updated, null);
+      await applyDerived(repo, updated);
       emit("data:changed", { kind: "session" });
     }, 1500);
   });
@@ -54,8 +66,9 @@ export function registerSessionMessageHandlers(repo: JsonRepository) {
       throw new Error(`Session not found: ${req.sessionId}`);
     }
 
-    const updated: Session = { ...existing, status: "completed" };
+    let updated: Session = { ...existing, status: "completed" };
     await repo.upsertSession(updated, null);
+    await applyDerived(repo, updated);
 
     emit("data:changed", { kind: "session" });
   });
