@@ -121,13 +121,7 @@ export function SessionDetail({
               <>
                 <span className="ml-1"><SessionStateIndicator status="running" size={14} /></span>
                 <button
-                  onClick={() => {
-                    // Prefer the parent handler (it owns the stop flow); only fall
-                    // back to a direct mutation when none was wired (e.g. the
-                    // project session view). Calling both double-fires the IPC.
-                    if (onStopAgent) onStopAgent();
-                    else mutations.stopAgent(session.id);
-                  }}
+                  onClick={() => onStopAgent?.()}
                   className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary"
                 >
                   <Square className="h-3 w-3" /> Stop

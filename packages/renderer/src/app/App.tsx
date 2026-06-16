@@ -80,9 +80,9 @@ export default function App() {
     ));
   };
 
-  /** Stop the agent for a session — calls both stopAgent and updateSessionStatus for clean transition. */
+  /** Stop the agent for a session via the session runtime. */
   const handleStopAgent = (sessionId: string) => {
-    mutations.stopAgent(sessionId);
+    mutations.stopSessionViaRuntime(sessionId);
   };
 
   const createSession = (prompt: string) => {

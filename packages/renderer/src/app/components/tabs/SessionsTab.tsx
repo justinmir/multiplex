@@ -41,6 +41,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
         prs={prs}
         references={session.references ?? []}
         onAddReference={(r) => mutations.upsertSessionReference(session.id, r)}
+        onStopAgent={() => mutations.stopSessionViaRuntime(session.id)}
         onClose={close}
       />
     );
