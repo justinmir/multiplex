@@ -29,9 +29,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
 
   const session = openId ? project.sessions.find((s) => s.id === openId) : null;
   if (session) {
-    const prs = (session.linkedPRs ?? [])
-      .map((lp) => project.prs.find((pr) => pr.repo === lp.repo && pr.number === lp.number))
-      .filter((p): p is NonNullable<typeof p> => !!p);
+    const prs = session.linkedPRs ?? [];
     return (
       <SessionDetail
         projectName={project.name}

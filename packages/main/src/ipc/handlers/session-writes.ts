@@ -2,6 +2,16 @@ import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { JsonRepository } from "../../repo/JsonRepository.js";
 import type { ActivityItem, Session } from "@app/core";
+import { deriveSessionStatus } from "../../session/deriveStatus.js";
+
+/** Apply derived status after a session upsert; patch + re-upsert if it changed. */
+async function applyDerived(repo: JsonRepository, updated: Session, projectId: string | null) {
+  const derived = deriveSessionStatus(updated);
+  if (derived !== updated.status) {
+    return repo.upsertSession({ ...updated, status: derived }, projectId);
+  }
+  return updated;
+}
 
 /** Generate a unique activity item ID. */
 function activityId(): string {
@@ -23,7 +33,8 @@ async function findSessionProject(repo: JsonRepository, sessionId: string): Prom
 export function registerSessionWriteHandlers(repo: JsonRepository) {
   // Create a new standalone session — persisted via upsertSession with null projectId
   handle("sessions:create", async (req) => {
-    const session = await repo.upsertSession(req.session, req.projectId ?? null);
+    const projectId = req.projectId ?? null;
+    let session = await repo.upsertSession(req.session, projectId);
 
     if (req.projectId) {
       const activity: ActivityItem = {
@@ -33,6 +44,12 @@ export function registerSessionWriteHandlers(repo: JsonRepository) {
         ts: new Date().toISOString(),
       };
       await repo.appendActivity(req.projectId, activity);
+    }
+
+    // Derive status from any linked PR signals
+    const derived = deriveSessionStatus(session);
+    if (derived !== session.status) {
+      session = await repo.upsertSession({ ...session, status: derived }, projectId);
     }
 
     emit("data:changed", { kind: "session" });
@@ -49,8 +66,8 @@ export function registerSessionWriteHandlers(repo: JsonRepository) {
     // Check if this session is linked to a project for activity logging and upsert scoping
     const projectId = await findSessionProject(repo, req.sessionId);
 
-    const updated: Session = { ...existing, status: req.status };
-    await repo.upsertSession(updated, projectId);
+    let updated: Session = { ...existing, status: req.status };
+    updated = await applyDerived(repo, updated, projectId);
 
     if (projectId) {
       const activity: ActivityItem = {

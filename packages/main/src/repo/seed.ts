@@ -117,7 +117,7 @@ export const seedStandaloneSessions: Session[] = [
     status: "mergeable",
     model: "claude-haiku-4-5-20251001",
     workspaces: [{ repo: "acme/utils", branch: "agent/rename-getcwd" }],
-    linkedPRs: [{ repo: "acme/utils", number: 1421 }],
+    linkedPRs: [{ id: "pr_utils_1421", number: 1421, title: "Rename getCwd to getCurrentWorkingDirectory", repo: "acme/utils", branch: "agent/rename-getcwd", status: "open", mergeable: "clean", reviewVerdict: "approved", author: "multiplex-agent", additions: 47, deletions: 23, updatedAt: new Date(NOW - hr).toISOString(), checks: { passed: 5, failed: 0, pending: 0 }, checkRuns: [{ id: "ck_seed_1", name: "ci", status: "success" }] }],
     startedAt: new Date(NOW - 2 * hr).toISOString(),
     createdAtMs: NOW - 2 * hr,
     durationMin: 4,
