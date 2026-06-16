@@ -2,6 +2,7 @@ import type { ActivityItem, PullRequest, Project } from "@app/core";
 import type { Repository } from "@app/core";
 import { configStore } from "./ConfigStore.js";
 import { githubClient } from "./GitHubClient.js";
+import { githubForge } from "../forge/GitHubForgeService.js";
 
 /** 
  * SyncService fetches real GitHub PR data for project repos and merges into local store.
@@ -30,19 +31,16 @@ export class SyncService {
       
       const [owner, name] = parts;
       try {
+        // List open PRs, then enrich each with full detail (files, comments,
+        // check runs, aggregated counts + verdict) via the forge, so the stored
+        // project PRs carry the same live data the session rails show (M-B2).
         const prs = await githubClient.listPRs(owner, name);
-        allPRs.push(...prs);
-        
-        // Also fetch check runs for each PR's branch
         for (const pr of prs) {
-          if (pr.branch) {
-            const checks = await githubClient.getCheckRuns(owner, name, pr.branch);
-            // Update the checks summary on the PR
-            pr.checks = {
-              passed: checks.filter(c => c.status === "success").length,
-              failed: checks.filter(c => c.status === "failure").length,
-              pending: checks.filter(c => c.status === "pending" || c.status === "skipped").length,
-            };
+          try {
+            const full = await githubForge.getPR(`${owner}/${name}`, pr.number);
+            allPRs.push(full ?? pr);
+          } catch {
+            allPRs.push(pr); // keep the summary if detail fetch fails
           }
         }
       } catch (err) {

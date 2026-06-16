@@ -2,7 +2,9 @@ import type { AppSettingsData, IntelligenceProvider, ProjectSummaryResult, Refer
 
 const ACTIVITY_DEBOUNCE_MS = 3 * 60_000;   // coalesce bursts of activity
 const MAX_PER_HOUR = 6;                      // cost guardrail per project
-const DAILY_MS = 24 * 60 * 60_000;
+const DAILY_MS = 24 * 60 * 60_000;           // resynthesize active projects at most daily
+const DAILY_CHECK_MS = 60 * 60_000;          // how often to check staleness
+const STARTUP_DELAY_MS = 30_000;             // catch-up pass shortly after boot
 
 /**
  * Wires the IntelligenceProvider to the repository: on-demand resynthesis,
@@ -13,6 +15,7 @@ export class IntelligenceService {
   private debounce = new Map<string, ReturnType<typeof setTimeout>>();
   private recent = new Map<string, number[]>(); // projectId → recent synth timestamps
   private dailyTimer: ReturnType<typeof setInterval> | null = null;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly repo: Repository,
@@ -74,28 +77,37 @@ export class IntelligenceService {
     }, ACTIVITY_DEBOUNCE_MS));
   }
 
-  /** Start the once-a-day synthesis tick (gated at fire time). */
+  /**
+   * Resynthesize active projects whose summary is older than a day. Runs on a
+   * frequent check rather than a 24h interval, and uses the *persisted*
+   * `summarySynthesizedAtMs` to decide staleness — so it catches up across app
+   * restarts instead of requiring 24h of continuous uptime.
+   */
   startDaily(): void {
     if (this.dailyTimer) return;
-    this.dailyTimer = setInterval(() => {
-      const s = this.getSettings();
-      if (!s.intelligenceEnabled) return;
+    const sweep = () => {
+      if (!this.getSettings().intelligenceEnabled) return;
+      const now = Date.now();
       this.repo.listProjects()
         .then((projects) => {
           for (const p of projects) {
-            if (p.status === "active" && this.underRateLimit(p.id)) {
+            const last = p.summarySynthesizedAtMs ?? 0;
+            if (p.status === "active" && now - last > DAILY_MS && this.underRateLimit(p.id)) {
               this.resynthesize(p.id).catch(() => {});
             }
           }
         })
         .catch(() => {});
-    }, DAILY_MS);
+    };
+    this.startupTimer = setTimeout(sweep, STARTUP_DELAY_MS); // catch-up after boot
+    this.dailyTimer = setInterval(sweep, DAILY_CHECK_MS);
   }
 
   stop(): void {
     for (const t of this.debounce.values()) clearTimeout(t);
     this.debounce.clear();
     if (this.dailyTimer) { clearInterval(this.dailyTimer); this.dailyTimer = null; }
+    if (this.startupTimer) { clearTimeout(this.startupTimer); this.startupTimer = null; }
   }
 
   private recordRun(projectId: string): void {

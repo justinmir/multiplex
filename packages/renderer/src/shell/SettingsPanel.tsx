@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Github, Loader2, CheckCircle2, AlertCircle, Plus, FolderGit2 } from "lucide-react";
+import { Github, Loader2, CheckCircle2, AlertCircle, Plus, FolderGit2 } from "lucide-react";
 import type { AppSettingsData } from "@app/core";
 import { call } from "../lib/ipc/client";
 import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
@@ -17,16 +17,27 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettingsData | null>(null);
-  const [showToken, setShowToken] = useState<Record<string, boolean>>({});
   const [connecting, setConnecting] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
+  // GitHub: the token never crosses IPC; we only track connection status here,
+  // and the token input is write-only.
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
   // M-A8: Harness state with dynamic model list and health status
   const { info: harnessInfo, loading: harnessLoading, refresh: refreshHarness } = useHarnessInfo(settings?.harnessId, open && !!settings);
 
-  // Load settings when dialog opens
+  const refreshGithubStatus = async () => {
+    try {
+      const { connected } = await call("github:get-status", undefined as never);
+      setGithubConnected(connected);
+    } catch { /* not critical */ }
+  };
+
+  // Load settings (secrets redacted) + connection status when dialog opens
   useEffect(() => {
     if (open) {
       call("settings:get", undefined).then(data => setSettings(data));
+      refreshGithubStatus();
     }
   }, [open]);
 
@@ -43,14 +54,24 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     setConnecting(true);
     try {
       await call("github:connect", undefined as never);
-      // Reload settings after OAuth completes so the token shows up
-      const updated = await call("settings:get", undefined);
-      setSettings(updated);
+      await refreshGithubStatus();
     } catch (e) {
       console.error("GitHub connect failed:", e);
     } finally {
       setConnecting(false);
     }
+  };
+
+  const handleSaveToken = async () => {
+    if (!tokenInput.trim()) return;
+    await save({ githubToken: tokenInput.trim() });
+    setTokenInput("");
+    await refreshGithubStatus();
+  };
+
+  const handleDisconnectGitHub = async () => {
+    await save({ githubToken: "" });
+    await refreshGithubStatus();
   };
 
   if (!settings) return null;
@@ -153,74 +174,52 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           </div>
         </div>
 
-        {/* API Keys Section */}
+        {/* GitHub Section — the token lives in main; the renderer only writes it. */}
         <div className="space-y-4 py-2">
-          <h3 className="text-sm font-medium text-muted-foreground">API Keys</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">GitHub</h3>
 
-          {(["githubToken", "anthropicApiKey"] as const).map((key) => (
-            <div key={key} className="space-y-2">
-              <Label>{key === "githubToken" ? "GitHub Token" : "Anthropic API Key"}</Label>
-              <div className="flex gap-2">
-                <Input
-                  type={showToken[key] ? "text" : "password"}
-                  placeholder={`Enter ${key}...`}
-                  value={settings[key] ?? ""}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => save({ [key]: e.target.value })}
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowToken(prev => ({ ...prev, [key]: !prev[key] }))}
-                  aria-label={showToken[key] ? "Hide token" : "Show token"}
-                >
-                  {showToken[key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          {/* GitHub Connection Status */}
           <div className="rounded-lg border p-4">
             <div className="flex items-center gap-3">
               <Github className="h-5 w-5 text-muted-foreground" />
               <div>
                 <div className="text-sm font-medium">GitHub</div>
                 <span className="flex items-center gap-1.5 mt-0.5">
-                  {settings.githubToken ? (
-                    <>
-                      <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                      <span className="font-mono text-xs text-muted-foreground">Connected</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/40" />
-                      <span className="font-mono text-xs text-muted-foreground">Not connected</span>
-                    </>
-                  )}
+                  <span className={`inline-block h-2 w-2 rounded-full ${githubConnected ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+                  <span className="font-mono text-xs text-muted-foreground">{githubConnected ? "Connected" : "Not connected"}</span>
                 </span>
               </div>
+              {githubConnected && (
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={handleDisconnectGitHub}>
+                  Disconnect
+                </Button>
+              )}
             </div>
 
-            {!settings.githubToken && (
-              <div className="mt-3 pt-3 border-t border-border/60">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectGitHub}
-                  disabled={connecting}
-                >
+            {!githubConnected && (
+              <div className="mt-3 space-y-3 pt-3 border-t border-border/60">
+                <Button variant="outline" size="sm" onClick={handleConnectGitHub} disabled={connecting}>
                   {connecting ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Connecting…
-                    </>
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Connecting…</>
                   ) : (
-                    <>
-                      <Github className="h-3.5 w-3.5" />
-                      Connect GitHub
-                    </>
+                    <><Github className="h-3.5 w-3.5" /> Connect GitHub</>
                   )}
                 </Button>
+                <div className="space-y-1.5">
+                  <Label htmlFor="gh-token">…or paste a personal access token</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="gh-token"
+                      type="password"
+                      placeholder="ghp_…"
+                      value={tokenInput}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenInput(e.target.value)}
+                      onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleSaveToken(); }}
+                    />
+                    <Button variant="outline" size="sm" onClick={handleSaveToken} disabled={!tokenInput.trim()}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
