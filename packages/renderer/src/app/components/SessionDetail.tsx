@@ -201,7 +201,7 @@ export function SessionDetail({
                 />
               )}
               {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={prs.reduce((s, p) => s + p.additions, 0)} totalDels={prs.reduce((s, p) => s + p.deletions, 0)} multiPR={prs.length > 1} />}
-              {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} />}
+              {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} onSendMessage={onSendMessage} session={session} />}
               {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} />}
               {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} />}
             </div>
@@ -512,27 +512,37 @@ function FileCard({ file }: { file: FileWithMeta }) {
 
 interface CommentWithMeta extends ReviewComment { _prNumber: number; _repo: string; }
 
-function ReviewsRail({ comments, multiPR }: { comments: CommentWithMeta[]; multiPR: boolean }) {
+function ReviewsRail({ comments, multiPR, onSendMessage, session }: { comments: CommentWithMeta[]; multiPR: boolean; onSendMessage?: (message: string) => void; session: Session | null }) {
   if (comments.length === 0) return <RailEmpty text="No review comments yet." />;
-  const unresolved = comments.filter((c) => c.kind === "inline" && !c.resolved).length;
+  const unresolvedComments = comments.filter((c) => !c.resolved);
+  const unresolvedCount = unresolvedComments.length;
   return (
     <div className="space-y-2.5 px-3 py-3">
       <div className="flex items-center justify-between px-1">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
-          {comments.length} comments · {unresolved} unresolved
+          {comments.length} comments · {unresolvedCount} unresolved
         </span>
-        <button className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80">
+        <button
+          onClick={() => {
+            if (!session || !onSendMessage || unresolvedComments.length === 0) return;
+            onSendMessage(`Please address all ${unresolvedComments.length} outstanding review comment(s)`);
+          }}
+          disabled={!session || !onSendMessage || unresolvedComments.length === 0}
+          className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Address all
         </button>
       </div>
-      {comments.map((c) => <ReviewCommentCard key={c.id + c._prNumber} comment={c} multiPR={multiPR} />)}
+      {comments.map((c) => <ReviewCommentCard key={c.id + c._prNumber} comment={c} multiPR={multiPR} onSendMessage={onSendMessage} session={session} />)}
     </div>
   );
 }
 
-function ReviewCommentCard({ comment, multiPR }: { comment: CommentWithMeta; multiPR: boolean }) {
+function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comment: CommentWithMeta; multiPR: boolean; onSendMessage?: (message: string) => void; session: Session | null }) {
   const [reply, setReply] = useState("");
   const isVerdict = comment.kind === "review" && comment.verdict;
+  const canSend = !!session && !!onSendMessage;
+
   return (
     <article className="rounded-md border border-border bg-card">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 px-2.5 py-1.5">
@@ -567,13 +577,28 @@ function ReviewCommentCard({ comment, multiPR }: { comment: CommentWithMeta; mul
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           placeholder="Reply…"
-          className="flex-1 bg-transparent text-[12px] placeholder:text-muted-foreground/70 focus:outline-none"
+          disabled={!canSend}
+          className="flex-1 bg-transparent text-[12px] placeholder:text-muted-foreground/70 focus:outline-none disabled:opacity-50"
         />
-        <button className="rounded-md px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <button
+          onClick={() => {
+            if (!onSendMessage || !session) return;
+            const location = comment.path ? `${comment.path}${comment.line !== undefined ? `:${comment.line}` : ''}` : '(general)';
+            onSendMessage(`Please help address this review comment on ${location}: "${comment.body}"`);
+          }}
+          disabled={!canSend}
+          className="rounded-md px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Ask agent
         </button>
         <button
-          disabled={!reply.trim()}
+          onClick={() => {
+            if (!reply.trim() || !session || !onSendMessage) return;
+            const location = comment.path ? `${comment.path}${comment.line !== undefined ? `:${comment.line}` : ''}` : '(general)';
+            onSendMessage(`@${comment.author} replied to comment on ${location}: "${reply.trim()}"`);
+            setReply("");
+          }}
+          disabled={!reply.trim() || !canSend}
           className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Reply
