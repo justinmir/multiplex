@@ -38,4 +38,13 @@ export interface DataSource {
   // M4.3 — PR merge + external links
   mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
   openUrl(url: string): Promise<void>;
+
+  // M-A5 — Session runtime (live agent harness)
+  startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }>;
+  sendToSession(sessionId: string, message: string): Promise<void>;
+  stopSession(sessionId: string): Promise<void>;
+
+  // M-A8 — Harness health + model list
+  harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;
+  harnessModels(harnessId: string): Promise<Array<{ id: string; label?: string; provider?: string }>>;
 }

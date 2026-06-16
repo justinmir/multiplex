@@ -13,6 +13,12 @@ import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js"
 import { registerSessionMessageHandlers } from "../ipc/handlers/session-messages.js";
 import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
+import { SessionRuntime } from "../session/SessionRuntime.js";
+import { setSessionRuntime } from "../session/runtime.js";
+import { registerSessionRuntimeHandlers } from "../ipc/handlers/session.js";
+import { getAppSettings } from "../settings/AppSettings.js";
+import { emit } from "../ipc/emit.js";
+import { registerBuiltInHarnesses } from "../harness/index.js";
 
 export function createIpcModule(): AppModule {
   return {
@@ -44,7 +50,30 @@ export function createIpcModule(): AppModule {
       // M3.1: Session CRUD handlers (create + status update)
       registerSessionWriteHandlers(repo);
 
-      // M3.4: Agent workflow foundation (message streaming + agent execution stub)
+      // M-A4: Register built-in harnesses and create the session runtime
+      registerBuiltInHarnesses();
+      const settings = getAppSettings();
+      const runtime = new SessionRuntime(
+        repo,
+        () => settings.get(),
+        emit,
+      );
+      setSessionRuntime(runtime);
+      registerSessionRuntimeHandlers(runtime);
+
+      // M-A7: Recover sessions left in "running" state from a previous crash
+      (async () => {
+        try {
+          const recovered = await runtime.recoverStaleSessions();
+          if (recovered.length > 0) {
+            console.log(`[M-A7] Recovered ${recovered.length} stale session(s):`, recovered);
+          }
+        } catch (err) {
+          console.error("[M-A7] Failed to recover stale sessions:", err);
+        }
+      })();
+
+      // M3.4: Legacy agent workflow stub — delegate to runtime where possible
       registerSessionMessageHandlers(repo);
 
       // M4.3: Application-level handlers (open URL in system browser)

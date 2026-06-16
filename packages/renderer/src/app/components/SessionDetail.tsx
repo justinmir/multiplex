@@ -28,6 +28,10 @@ interface Props {
   onStopAgent?: () => void;
   onClose: () => void;
   starterPrompts?: string[];
+  // M-A8 — model selection
+  currentModel?: string;
+  availableModels?: Array<{ id: string; label?: string; provider?: string }>;
+  onSelectModel?: (modelId: string) => void;
 }
 
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
@@ -35,6 +39,7 @@ type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 export function SessionDetail({
   projectName, backLabel = "Back", session, prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
+  currentModel, availableModels, onSelectModel,
 }: Props) {
   const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
@@ -145,6 +150,9 @@ export function SessionDetail({
             session={session}
             draft={draft}
             setDraft={setDraft}
+            currentModel={currentModel ?? session?.model}
+            availableModels={availableModels}
+            onSelectModel={onSelectModel}
             onSend={() => {
               const v = draft.trim();
               if (!v) return;
@@ -798,7 +806,11 @@ function NewSessionPane({ projectName, starterPrompts, draft, setDraft }: { proj
   );
 }
 
-function Composer({ session, draft, setDraft, onSend }: { session: Session | null; draft: string; setDraft: (v: string) => void; onSend?: () => void }) {
+function Composer({ session, draft, setDraft, currentModel, availableModels, onSelectModel, onSend }: { session: Session | null; draft: string; setDraft: (v: string) => void; currentModel?: string; availableModels?: Array<{ id: string; label?: string; provider?: string }>; onSelectModel?: (modelId: string) => void; onSend?: () => void }) {
+  const [modelOpen, setModelOpen] = useState(false);
+  const displayModel = currentModel ?? "default";
+  const modelLabel = availableModels?.find((m) => m.id === currentModel)?.label ?? currentModel ?? "default";
+
   return (
     <div className="border-t border-border bg-card/40 px-6 py-4">
       <div className="mx-auto max-w-3xl">
@@ -811,9 +823,36 @@ function Composer({ session, draft, setDraft, onSend }: { session: Session | nul
             className="w-full resize-none bg-transparent px-3.5 py-3 text-[13.5px] placeholder:text-muted-foreground/70 focus:outline-none"
           />
           <div className="flex items-center gap-2 border-t border-border/60 px-2 py-2">
-            <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <Cpu className="h-3 w-3" /> claude-opus-4-7
-            </button>
+            {availableModels && availableModels.length > 0 && onSelectModel ? (
+              <div className="relative">
+                <button
+                  onClick={() => setModelOpen(!modelOpen)}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <Cpu className="h-3 w-3" /> {modelLabel}
+                </button>
+                {modelOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setModelOpen(false)} />
+                    <div className="absolute bottom-full left-0 mb-1 min-w-[200px] rounded-md border border-border bg-card py-1 shadow-lg z-50">
+                      {availableModels.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => { onSelectModel(m.id); setModelOpen(false); }}
+                          className={`block w-full px-3 py-1.5 text-left font-mono text-[11px] hover:bg-secondary ${m.id === currentModel ? "text-foreground bg-secondary/50" : "text-muted-foreground"}`}
+                        >
+                          {m.label ?? m.id}{m.provider ? ` (${m.provider})` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+                <Cpu className="h-3 w-3" /> {displayModel}
+              </button>
+            )}
             <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
               <GitBranch className="h-3 w-3" /> repos & branches
             </button>

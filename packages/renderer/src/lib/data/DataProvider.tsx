@@ -66,6 +66,20 @@ interface DataMutationValue {
   mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
   /** Open a URL in the system browser via IPC. */
   openUrl(url: string): Promise<void>;
+
+  // M-A5 — Session runtime (live agent harness)
+  /** Start a new session with the active harness. Returns the session ID. */
+  startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }>;
+  /** Send a follow-up message to an existing running session. */
+  sendToSession(sessionId: string, message: string): Promise<void>;
+  /** Stop the agent for a session via runtime (replaces optimistic stopAgent). */
+  stopSessionViaRuntime(sessionId: string): Promise<void>;
+
+  // M-A8 — Harness health + model list
+  /** Check harness health. */
+  checkHarnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;
+  /** Get available models for a given harness id. */
+  getHarnessModels(harnessId: string): Promise<Array<{ id: string; label?: string; provider?: string }>>;
 }
 
 const DataMutationContext = createContext<DataMutationValue>(null!);
@@ -413,6 +427,65 @@ export function DataProvider({
     /** M4.3 — Open a URL in the system browser via IPC. */
     async openUrl(url: string): Promise<void> {
       await activeSource.openUrl(url);
+    },
+
+    // ---- M-A5 — Session runtime (live agent harness) ----
+
+    /** Start a new session with the active harness. Returns the session ID. */
+    async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
+      try {
+        const result = await activeSource.startSession(input);
+        await loadData();
+        toast.success("Session started");
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to start session";
+        setError(msg);
+        toast.error(`Failed to start session: ${msg}`);
+        throw err;
+      }
+    },
+
+    /** Send a follow-up message to an existing running session. */
+    async sendToSession(sessionId: string, message: string): Promise<void> {
+      try {
+        await activeSource.sendToSession(sessionId, message);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to send message";
+        setError(msg);
+        toast.error(`Failed to send message: ${msg}`);
+        throw err;
+      }
+    },
+
+    /** Stop the agent for a session via runtime. */
+    async stopSessionViaRuntime(sessionId: string): Promise<void> {
+      const prevSessions = standaloneSessions;
+      setStandaloneSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, status: "idle" } : s))
+      );
+      try {
+        await activeSource.stopSession(sessionId);
+        toast.success("Agent stopped");
+      } catch (err) {
+        setStandaloneSessions(prevSessions);
+        const msg = err instanceof Error ? err.message : "Failed to stop agent";
+        setError(msg);
+        toast.error(`Failed to stop agent: ${msg}`);
+        throw err;
+      }
+    },
+
+    // ---- M-A8 — Harness health + model list ----
+
+    /** Check harness health. */
+    async checkHarnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {
+      return activeSource.harnessHealth(harnessId);
+    },
+
+    /** Get available models for a given harness id. */
+    async getHarnessModels(harnessId: string): Promise<Array<{ id: string; label?: string; provider?: string }>> {
+      return activeSource.harnessModels(harnessId);
     },
 
     githubConnected,

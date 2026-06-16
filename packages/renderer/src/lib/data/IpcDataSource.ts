@@ -107,4 +107,28 @@ export class IpcDataSource implements DataSource {
   async openUrl(url: string): Promise<void> {
     return call("app:open-url", { url });
   }
+
+  // ---- M-A5 — Session runtime (live agent harness) ----
+
+  async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
+    return call("session:start", input);
+  }
+
+  async sendToSession(sessionId: string, message: string): Promise<void> {
+    return call("session:send", { sessionId, message });
+  }
+
+  async stopSession(sessionId: string): Promise<void> {
+    return call("session:stop", { sessionId });
+  }
+
+  // ---- M-A8 — Harness health + model list ----
+
+  async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {
+    return call("harness:health", { harnessId });
+  }
+
+  async harnessModels(harnessId: string): Promise<Array<{ id: string; label?: string; provider?: string }>> {
+    return call("harness:models", { harnessId });
+  }
 }

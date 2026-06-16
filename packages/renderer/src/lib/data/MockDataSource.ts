@@ -104,4 +104,27 @@ export class MockDataSource implements DataSource {
   async openUrl(_url: string): Promise<void> {
     // no-op in mock — renderer can't open external URLs without IPC
   }
+
+  // ---- M-A5 — Session runtime (stubs for mock) ----
+
+  async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
+    return { sessionId: input.sessionId ?? `mock_${Date.now().toString(36)}` };
+  }
+
+  async sendToSession(_sessionId: string, _message: string): Promise<void> {}
+
+  async stopSession(_sessionId: string): Promise<void> {}
+
+  // ---- M-A8 — Harness health + model list (stubs for mock) ----
+
+  async harnessHealth(_harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {
+    return { ok: true, version: "mock-1.0.0" };
+  }
+
+  async harnessModels(_harnessId: string): Promise<Array<{ id: string; label?: string; provider?: string }>> {
+    return [
+      { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4", provider: "anthropic" },
+      { id: "openai/gpt-4.1", label: "GPT-4.1", provider: "openai" },
+    ];
+  }
 }

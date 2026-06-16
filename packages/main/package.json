@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "node --test",
+    "test": "tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "exports": {
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@app/electron-versions": "*",
     "electron-devtools-installer": "4.0.0",
+    "tsx": "^4.22.4",
     "typescript": "6.0.2",
     "vite": "8.0.3"
   }
