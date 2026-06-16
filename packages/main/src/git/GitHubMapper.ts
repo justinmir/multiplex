@@ -1,4 +1,85 @@
-import type { CheckRun, PullRequest } from "@app/core";
+import type { CheckRun, FileChange, PullRequest, ReviewComment } from "@app/core";
+
+/** Map a GitHub PR file (pulls.listFiles) to a domain FileChange. */
+export function mapFile(f: {
+  filename: string;
+  previous_filename?: string;
+  additions?: number;
+  deletions?: number;
+  status: string;
+  patch?: string;
+}): FileChange {
+  const kind: FileChange["kind"] =
+    f.status === "added" ? "added"
+    : f.status === "removed" ? "deleted"
+    : f.status === "renamed" ? "renamed"
+    : "modified";
+  return {
+    path: f.filename,
+    additions: f.additions ?? 0,
+    deletions: f.deletions ?? 0,
+    hunk: f.patch ?? "",
+    kind,
+  };
+}
+
+/** Map a GitHub review (pulls.listReviews) verdict to our ReviewComment. */
+export function mapReview(r: {
+  id: number;
+  user: { login: string } | null;
+  state: string;
+  body: string;
+  submitted_at?: string | null;
+}): ReviewComment {
+  const verdict: ReviewComment["verdict"] =
+    r.state === "APPROVED" ? "approved"
+    : r.state === "CHANGES_REQUESTED" ? "changes_requested"
+    : "commented";
+  return {
+    id: `review_${r.id}`,
+    author: r.user?.login ?? "unknown",
+    kind: "review",
+    verdict,
+    body: r.body || (verdict === "approved" ? "Approved" : verdict === "changes_requested" ? "Requested changes" : "Commented"),
+    ts: r.submitted_at ? new Date(r.submitted_at).toISOString() : new Date().toISOString(),
+  };
+}
+
+/** Map an inline review comment (pulls.listReviewComments) to our ReviewComment. */
+export function mapInlineComment(c: {
+  id: number;
+  user: { login: string } | null;
+  body: string;
+  path?: string;
+  line?: number | null;
+  created_at: string;
+}): ReviewComment {
+  return {
+    id: `inline_${c.id}`,
+    author: c.user?.login ?? "unknown",
+    kind: "inline",
+    body: c.body,
+    path: c.path,
+    line: c.line ?? undefined,
+    ts: new Date(c.created_at).toISOString(),
+  };
+}
+
+/** Map an issue-level comment (issues.listComments) to a general ReviewComment. */
+export function mapIssueComment(c: {
+  id: number;
+  user: { login: string } | null;
+  body?: string;
+  created_at: string;
+}): ReviewComment {
+  return {
+    id: `comment_${c.id}`,
+    author: c.user?.login ?? "unknown",
+    kind: "general",
+    body: c.body ?? "",
+    ts: new Date(c.created_at).toISOString(),
+  };
+}
 
 /** Minimal shape of a GitHub REST API PR object (from pulls.list response). */
 type GitHubPR = {

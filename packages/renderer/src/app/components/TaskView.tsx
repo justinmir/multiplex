@@ -16,9 +16,14 @@ interface Props {
   onSelectModel?: (modelId: string) => void;
   // M-C4 — real working-tree diffs
   worktreeChanges?: Array<{ repo: string; files: FileChange[] }>;
+  // M-B4 / M-B5 — PR actions
+  onReplyToComment?: (repo: string, number: number, commentId: string, body: string) => void;
+  onRerunChecks?: (repo: string, number: number) => void;
+  onAddressComments?: (comments: string[]) => void;
+  onOpenPR?: () => void;
 }
 
-export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges }: Props) {
+export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
@@ -33,6 +38,10 @@ export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAg
       availableModels={availableModels}
       onSelectModel={onSelectModel}
       worktreeChanges={worktreeChanges}
+      onReplyToComment={onReplyToComment}
+      onRerunChecks={onRerunChecks}
+      onAddressComments={onAddressComments}
+      onOpenPR={onOpenPR}
     />
   );
 }

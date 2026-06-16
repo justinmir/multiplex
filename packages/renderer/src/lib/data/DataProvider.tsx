@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
-import { on } from "../ipc/client.js";
+import { call, on } from "../ipc/client.js";
 import type { DataSource } from "./types.js";
 
 interface DataContextValue {
@@ -58,6 +58,16 @@ interface DataMutationValue {
   mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
   /** Open a URL in the system browser via IPC. */
   openUrl(url: string): Promise<void>;
+
+  // M-B4 / M-B5 — PR actions
+  /** Reply to a PR/review comment on GitHub. */
+  replyToComment(repo: string, number: number, commentId: string, body: string): Promise<void>;
+  /** Re-run a PR's checks on GitHub. */
+  rerunChecks(repo: string, number: number): Promise<void>;
+  /** Ask the agent to address review comments (re-enters the harness). */
+  addressComments(sessionId: string, comments: string[]): Promise<void>;
+  /** Open a draft PR per touched repo with changes; returns the count opened. */
+  openSessionPR(sessionId: string): Promise<{ opened: number; message?: string }>;
 
   // M-A5 — Session runtime (live agent harness)
   /** Start a new session with the active harness. Returns the session ID. */
@@ -370,6 +380,61 @@ export function DataProvider({
     /** M4.3 — Open a URL in the system browser via IPC. */
     async openUrl(url: string): Promise<void> {
       await activeSource.openUrl(url);
+    },
+
+    // ---- M-B4 / M-B5 — PR actions ----
+
+    /** Reply to a PR/review comment on GitHub. */
+    async replyToComment(repo: string, number: number, commentId: string, body: string): Promise<void> {
+      const id = toast.loading("Posting reply…");
+      try {
+        await call("pr:reply", { repo, number, commentId, body });
+        toast.success("Reply posted", { id });
+      } catch (err) {
+        toast.error(`Reply failed: ${err instanceof Error ? err.message : String(err)}`, { id });
+        throw err;
+      }
+    },
+
+    /** Re-run a PR's checks on GitHub. */
+    async rerunChecks(repo: string, number: number): Promise<void> {
+      const id = toast.loading("Re-running checks…");
+      try {
+        await call("pr:rerun", { repo, number });
+        toast.success("Checks re-queued", { id });
+      } catch (err) {
+        toast.error(`Re-run failed: ${err instanceof Error ? err.message : String(err)}`, { id });
+        throw err;
+      }
+    },
+
+    /** Ask the agent to address the given review comments (re-enters the harness). */
+    async addressComments(sessionId: string, comments: string[]): Promise<void> {
+      try {
+        await call("session:address-comments", { sessionId, comments });
+        toast.success("Asked the agent to address the comments");
+      } catch (err) {
+        toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      }
+    },
+
+    /** Open a draft PR for every touched repo with changes. */
+    async openSessionPR(sessionId: string): Promise<{ opened: number; message?: string }> {
+      const id = toast.loading("Opening pull request(s)…");
+      try {
+        const result = await call("session:open-pr", { sessionId });
+        await loadData();
+        if (result.opened.length > 0) {
+          toast.success(`Opened ${result.opened.length} pull request(s)`, { id });
+        } else {
+          toast.message(result.message ?? "No changes to open a PR for", { id });
+        }
+        return { opened: result.opened.length, message: result.message };
+      } catch (err) {
+        toast.error(`Open PR failed: ${err instanceof Error ? err.message : String(err)}`, { id });
+        throw err;
+      }
     },
 
     // ---- M-A5 — Session runtime (live agent harness) ----

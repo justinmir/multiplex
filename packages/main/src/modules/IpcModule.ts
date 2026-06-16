@@ -14,9 +14,11 @@ import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 import { registerRepoHandlers } from "../ipc/handlers/repos.js";
 import { registerChangesHandlers } from "../ipc/handlers/changes.js";
+import { registerPrHandlers } from "../ipc/handlers/pr.js";
 import { WorkspaceManager } from "../session/WorkspaceManager.js";
 import { gitService } from "../git/LocalGitService.js";
 import { repoRegistry } from "../git/RepoRegistry.js";
+import { githubForge } from "../forge/GitHubForgeService.js";
 import { sessionsDir } from "../repo/paths.js";
 import { SessionRuntime } from "../session/SessionRuntime.js";
 import { setSessionRuntime } from "../session/runtime.js";
@@ -64,12 +66,16 @@ export function createIpcModule(): AppModule {
         () => settings.get(),
         emit,
         workspaceManager,
+        { forge: githubForge, git: gitService },
       );
       setSessionRuntime(runtime);
       registerSessionRuntimeHandlers(runtime);
 
       // M-C4: Real diffs across a session's materialized worktrees
       registerChangesHandlers(runtime);
+
+      // M-B3/M-B4/M-B5: live PR detail, PR actions, and PR fan-out
+      registerPrHandlers(githubForge, runtime);
 
       // M-A7: Recover sessions left in "running" state from a previous crash
       (async () => {

@@ -34,6 +34,11 @@ interface Props {
   onSelectModel?: (modelId: string) => void;
   // M-C4 — real working-tree diffs from the session's materialized worktrees
   worktreeChanges?: Array<{ repo: string; files: FileChange[] }>;
+  // M-B4 / M-B5 — PR actions
+  onReplyToComment?: (repo: string, number: number, commentId: string, body: string) => void;
+  onRerunChecks?: (repo: string, number: number) => void;
+  onAddressComments?: (comments: string[]) => void;
+  onOpenPR?: () => void;
 }
 
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
@@ -42,6 +47,7 @@ export function SessionDetail({
   projectName, backLabel = "Back", session, prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
+  onReplyToComment, onRerunChecks, onAddressComments, onOpenPR,
 }: Props) {
   const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
@@ -215,11 +221,12 @@ export function SessionDetail({
                     const url = `https://github.com/${pr.repo}/pull/${pr.number}`;
                     mutations.openUrl(url);
                   }}
+                  onOpenPR={onOpenPR}
                 />
               )}
               {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)} totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)} multiPR={multiRepo} />}
-              {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} onSendMessage={onSendMessage} session={session} />}
-              {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} />}
+              {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} onSendMessage={onSendMessage} session={session} onReplyToComment={onReplyToComment} onAddressComments={onAddressComments} />}
+              {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} onRerunChecks={onRerunChecks} />}
               {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} openAddTick={refAddTick} />}
             </div>
           </aside>
@@ -260,7 +267,8 @@ export function SessionDetail({
 
 /* ---------- Right-rail panes ---------- */
 
-function OverviewRail({ session, prs, onMergePR, onOpenGitHub }: { session: Session; prs: PullRequest[]; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void }) {
+function OverviewRail({ session, prs, onMergePR, onOpenGitHub, onOpenPR }: { session: Session; prs: PullRequest[]; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void; onOpenPR?: () => void }) {
+  const hasWorkspaces = session.workspaces.length > 0;
   return (
     <div className="space-y-4 px-4 py-4">
       {/* Workspaces */}
@@ -289,6 +297,15 @@ function OverviewRail({ session, prs, onMergePR, onOpenGitHub }: { session: Sess
           <ul className="space-y-2">
             {prs.map((pr) => <PRSummaryCard key={pr.id} pr={pr} onMergePR={onMergePR} onOpenGitHub={onOpenGitHub} />)}
           </ul>
+        )}
+        {onOpenPR && hasWorkspaces && (
+          <button
+            onClick={onOpenPR}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[11px] text-foreground hover:bg-secondary"
+          >
+            <GitPullRequest className="h-3 w-3" />
+            {prs.length === 0 ? "Open draft PR(s)" : "Open PR(s) for new changes"}
+          </button>
         )}
       </RailBlock>
 
@@ -529,10 +546,15 @@ function FileCard({ file }: { file: FileWithMeta }) {
 
 interface CommentWithMeta extends ReviewComment { _prNumber: number; _repo: string; }
 
-function ReviewsRail({ comments, multiPR, onSendMessage, session }: { comments: CommentWithMeta[]; multiPR: boolean; onSendMessage?: (message: string) => void; session: Session | null }) {
+function ReviewsRail({ comments, multiPR, onSendMessage, session, onReplyToComment, onAddressComments }: { comments: CommentWithMeta[]; multiPR: boolean; onSendMessage?: (message: string) => void; session: Session | null; onReplyToComment?: (repo: string, number: number, commentId: string, body: string) => void; onAddressComments?: (comments: string[]) => void }) {
   if (comments.length === 0) return <RailEmpty text="No review comments yet." />;
   const unresolvedComments = comments.filter((c) => !c.resolved);
   const unresolvedCount = unresolvedComments.length;
+  // Describe a comment for the agent with its location for context.
+  const describe = (c: CommentWithMeta) => {
+    const loc = c.path ? `${c.path}${c.line !== undefined ? `:${c.line}` : ""}` : "(general)";
+    return `[${c._repo}#${c._prNumber} ${loc}] ${c.author}: ${c.body}`;
+  };
   return (
     <div className="space-y-2.5 px-3 py-3">
       <div className="flex items-center justify-between px-1">
@@ -541,24 +563,25 @@ function ReviewsRail({ comments, multiPR, onSendMessage, session }: { comments: 
         </span>
         <button
           onClick={() => {
-            if (!session || !onSendMessage || unresolvedComments.length === 0) return;
-            onSendMessage(`Please address all ${unresolvedComments.length} outstanding review comment(s)`);
+            if (!onAddressComments || unresolvedComments.length === 0) return;
+            onAddressComments(unresolvedComments.map(describe));
           }}
-          disabled={!session || !onSendMessage || unresolvedComments.length === 0}
+          disabled={!onAddressComments || unresolvedComments.length === 0}
           className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Address all
         </button>
       </div>
-      {comments.map((c) => <ReviewCommentCard key={c.id + c._prNumber} comment={c} multiPR={multiPR} onSendMessage={onSendMessage} session={session} />)}
+      {comments.map((c) => <ReviewCommentCard key={c.id + c._prNumber} comment={c} multiPR={multiPR} session={session} onReplyToComment={onReplyToComment} onAddressComments={onAddressComments} describe={describe} />)}
     </div>
   );
 }
 
-function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comment: CommentWithMeta; multiPR: boolean; onSendMessage?: (message: string) => void; session: Session | null }) {
+function ReviewCommentCard({ comment, multiPR, session, onReplyToComment, onAddressComments, describe }: { comment: CommentWithMeta; multiPR: boolean; session: Session | null; onReplyToComment?: (repo: string, number: number, commentId: string, body: string) => void; onAddressComments?: (comments: string[]) => void; describe: (c: CommentWithMeta) => string }) {
   const [reply, setReply] = useState("");
   const isVerdict = comment.kind === "review" && comment.verdict;
-  const canSend = !!session && !!onSendMessage;
+  const canReply = !!onReplyToComment && comment._prNumber > 0;
+  const canAsk = !!onAddressComments && !!session;
 
   return (
     <article className="rounded-md border border-border bg-card">
@@ -593,29 +616,24 @@ function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comme
         <input
           value={reply}
           onChange={(e) => setReply(e.target.value)}
-          placeholder="Reply…"
-          disabled={!canSend}
+          placeholder={canReply ? "Reply on GitHub…" : "Reply…"}
+          disabled={!canReply}
           className="flex-1 bg-transparent text-[12px] placeholder:text-muted-foreground/70 focus:outline-none disabled:opacity-50"
         />
         <button
-          onClick={() => {
-            if (!onSendMessage || !session) return;
-            const location = comment.path ? `${comment.path}${comment.line !== undefined ? `:${comment.line}` : ''}` : '(general)';
-            onSendMessage(`Please help address this review comment on ${location}: "${comment.body}"`);
-          }}
-          disabled={!canSend}
+          onClick={() => onAddressComments?.([describe(comment)])}
+          disabled={!canAsk}
           className="rounded-md px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           Ask agent
         </button>
         <button
           onClick={() => {
-            if (!reply.trim() || !session || !onSendMessage) return;
-            const location = comment.path ? `${comment.path}${comment.line !== undefined ? `:${comment.line}` : ''}` : '(general)';
-            onSendMessage(`@${comment.author} replied to comment on ${location}: "${reply.trim()}"`);
+            if (!reply.trim() || !onReplyToComment) return;
+            onReplyToComment(comment._repo, comment._prNumber, comment.id, reply.trim());
             setReply("");
           }}
-          disabled={!reply.trim() || !canSend}
+          disabled={!reply.trim() || !canReply}
           className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Reply
@@ -629,16 +647,22 @@ function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comme
 
 interface RunWithMeta extends CheckRun { _prNumber: number; _repo: string; }
 
-function ChecksRail({ runs, multiPR }: { runs: RunWithMeta[]; multiPR: boolean }) {
+function ChecksRail({ runs, multiPR, onRerunChecks }: { runs: RunWithMeta[]; multiPR: boolean; onRerunChecks?: (repo: string, number: number) => void }) {
   if (runs.length === 0) return <RailEmpty text="No checks." />;
   const failed = runs.filter((r) => r.status === "failure");
+  // Distinct PRs represented by these runs (re-run targets one or more PRs).
+  const prTargets = Array.from(new Map(runs.map((r) => [`${r._repo}#${r._prNumber}`, { repo: r._repo, number: r._prNumber }])).values());
   return (
     <div className="space-y-2 px-3 py-3">
       <div className="flex items-center justify-between px-1">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
           {runs.length} checks · {failed.length > 0 ? `${failed.length} failing` : "healthy"}
         </span>
-        <button className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80">
+        <button
+          onClick={() => prTargets.forEach((t) => onRerunChecks?.(t.repo, t.number))}
+          disabled={!onRerunChecks || prTargets.length === 0}
+          className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] text-foreground hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Re-run
         </button>
       </div>

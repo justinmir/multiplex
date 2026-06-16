@@ -1,4 +1,5 @@
 export * from './domain.js';
+export * from './forge.js';
 export * from './git.js';
 export * from './harness/registry.js';
 export * from './harness/types.js';
