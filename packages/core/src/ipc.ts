@@ -24,8 +24,7 @@ export interface IpcContract {
   "sessions:create": { req: { session: Session; projectId?: string }; res: Session };
   "sessions:update-status": { req: { sessionId: string; status: SessionStatus }; res: void };
 
-  // M2.2 — GitHub OAuth + token management
-  "github:get-token": { req: void; res: string | null };
+  // M2.2 — GitHub OAuth + connection status (the token never leaves main)
   "github:connect": { req: void; res: { success: boolean } };
   "github:get-status": { req: void; res: { connected: boolean } };
 
@@ -90,7 +89,8 @@ export interface AppSettingsData {
   defaultModel?: string;
   /** Persistence backend (takes effect on restart). Default "json". */
   repoBackend?: "json" | "sqlite";
-  anthropicApiKey?: string;
+  /** GitHub token. Stored in main; redacted from settings:get/set responses
+   *  (write-only from the renderer's perspective — it never reads it back). */
   githubToken?: string;
   repoRoots: Array<{ name: string; root: string }>;
   intelligenceEnabled: boolean;
