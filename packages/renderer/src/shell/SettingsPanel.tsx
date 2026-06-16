@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Github } from "lucide-react";
+import { Eye, EyeOff, Github, Loader2 } from "lucide-react";
 import type { AppSettingsData } from "@app/core";
 import { call } from "../lib/ipc/client";
 import { Button } from "../app/components/ui/button";
@@ -16,6 +16,7 @@ interface SettingsPanelProps {
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettingsData | null>(null);
   const [showToken, setShowToken] = useState<Record<string, boolean>>({});
+  const [connecting, setConnecting] = useState(false);
 
   // Load settings when dialog opens
   useEffect(() => {
@@ -30,6 +31,20 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setSettings(updated);
     } catch (e) {
       console.error("Failed to save settings:", e);
+    }
+  };
+
+  const handleConnectGitHub = async () => {
+    setConnecting(true);
+    try {
+      await call("github:connect", undefined as never);
+      // Reload settings after OAuth completes so the token shows up
+      const updated = await call("settings:get", undefined);
+      setSettings(updated);
+    } catch (e) {
+      console.error("GitHub connect failed:", e);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -117,6 +132,29 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 </span>
               </div>
             </div>
+
+            {!settings.githubToken && (
+              <div className="mt-3 pt-3 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConnectGitHub}
+                  disabled={connecting}
+                >
+                  {connecting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Connecting…
+                    </>
+                  ) : (
+                    <>
+                      <Github className="h-3.5 w-3.5" />
+                      Connect GitHub
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
