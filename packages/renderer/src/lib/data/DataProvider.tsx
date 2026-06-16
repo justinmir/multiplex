@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Note, Project, Reference, RefScope, Session, SessionMsg, SessionStatus } from "@app/core";
+import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 import { on } from "../ipc/client.js";
 import type { DataSource } from "./types.js";
 
@@ -48,14 +48,6 @@ interface DataMutationValue {
   githubConnected: boolean;
   /** True while any project sync is in progress. */
   isSyncing: boolean;
-
-  // M3.4 — agent workflow foundation
-  /** Add a message to a session's conversation — optimistic update, then persist via IPC. */
-  addMessage(sessionId: string, message: SessionMsg): Promise<void>;
-  /** Start simulated agent execution for a session. */
-  startAgent(sessionId: string): Promise<void>;
-  /** Stop agent execution — optimistic status change to completed, then persist. */
-  stopAgent(sessionId: string): Promise<void>;
 
   // M4.2 — GitHub connect flow
   /** Initiate GitHub OAuth connection; refreshes data on completion. */
@@ -337,55 +329,6 @@ export function DataProvider({
     },
 
     // ---- M3.4 — agent workflow foundation ----
-
-    /** Add a message to a session's conversation — optimistic update, then persist via IPC. */
-    async addMessage(sessionId: string, message: SessionMsg): Promise<void> {
-      const prevSessions = standaloneSessions;
-      // Optimistic update — append message to local session state
-      setStandaloneSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, messages: [...s.messages, message] } : s))
-      );
-      try {
-        await activeSource.addMessage(sessionId, message);
-      } catch (err) {
-        // Roll back optimistic update on failure
-        setStandaloneSessions(prevSessions);
-        setError(err instanceof Error ? err.message : "Failed to send message");
-        toast.error(`Failed to send message: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
-      }
-    },
-
-    /** Start simulated agent execution for a session. */
-    async startAgent(sessionId: string): Promise<void> {
-      try {
-        await activeSource.startAgent(sessionId);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to start agent");
-        toast.error(`Failed to start agent: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
-      }
-    },
-
-    /** Stop agent execution — optimistic status change to completed, then persist. */
-    async stopAgent(sessionId: string): Promise<void> {
-      const prevSessions = standaloneSessions;
-      // Optimistic update
-      setStandaloneSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, status: "completed" } : s))
-      );
-      try {
-        await activeSource.stopAgent(sessionId);
-        toast.success("Agent stopped");
-      } catch (err) {
-        // Roll back optimistic update on failure
-        setStandaloneSessions(prevSessions);
-        const msg = err instanceof Error ? err.message : "Failed to stop agent";
-        setError(msg);
-        toast.error(`Failed to stop agent: ${msg}`);
-        throw err;
-      }
-    },
 
     /** M4.2 — Initiate GitHub OAuth connection, then refresh all data including status. */
     async connectGitHub(): Promise<{ success: boolean }> {

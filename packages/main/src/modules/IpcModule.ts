@@ -10,7 +10,6 @@ import { registerGitHubHandlers } from "../ipc/handlers/github.js";
 import { SyncService, setSyncService } from "../git/SyncService.js";
 import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
-import { registerSessionMessageHandlers } from "../ipc/handlers/session-messages.js";
 import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 import { SessionRuntime } from "../session/SessionRuntime.js";
@@ -72,9 +71,6 @@ export function createIpcModule(): AppModule {
           console.error("[M-A7] Failed to recover stale sessions:", err);
         }
       })();
-
-      // M3.4: Legacy agent workflow stub — delegate to runtime where possible
-      registerSessionMessageHandlers(repo);
 
       // M4.3: Application-level handlers (open URL in system browser)
       registerAppHandlers();
