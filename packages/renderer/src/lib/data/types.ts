@@ -31,4 +31,11 @@ export interface DataSource {
   addMessage(sessionId: string, message: SessionMsg): Promise<void>;
   startAgent(sessionId: string): Promise<void>;
   stopAgent(sessionId: string): Promise<void>;
+
+  // M4.2 — GitHub connect flow
+  connectGitHub(): Promise<{ success: boolean }>;
+
+  // M4.3 — PR merge + external links
+  mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
+  openUrl(url: string): Promise<void>;
 }

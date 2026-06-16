@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { Note, Project, Reference, RefScope, Session, SessionMsg, SessionStatus } from "@app/core";
 import { on } from "../ipc/client.js";
 import type { DataSource } from "./types.js";
@@ -55,6 +56,16 @@ interface DataMutationValue {
   startAgent(sessionId: string): Promise<void>;
   /** Stop agent execution — optimistic status change to completed, then persist. */
   stopAgent(sessionId: string): Promise<void>;
+
+  // M4.2 — GitHub connect flow
+  /** Initiate GitHub OAuth connection; refreshes data on completion. */
+  connectGitHub(): Promise<{ success: boolean }>;
+
+  // M4.3 — PR merge + external links
+  /** Merge a pull request via Octokit and refresh data. */
+  mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
+  /** Open a URL in the system browser via IPC. */
+  openUrl(url: string): Promise<void>;
 }
 
 const DataMutationContext = createContext<DataMutationValue>(null!);
@@ -132,9 +143,12 @@ export function DataProvider({
       try {
         const result = await activeSource.upsertNote(projectId, note);
         await loadData();
+        toast.success("Note saved");
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to upsert note");
+        const msg = err instanceof Error ? err.message : "Failed to save note";
+        setError(msg);
+        toast.error(`Failed to save note: ${msg}`);
         throw err;
       }
     },
@@ -143,8 +157,11 @@ export function DataProvider({
       try {
         await activeSource.deleteNote(projectId, noteId);
         await loadData();
+        toast.success("Note deleted");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete note");
+        const msg = err instanceof Error ? err.message : "Failed to delete note";
+        setError(msg);
+        toast.error(`Failed to delete note: ${msg}`);
         throw err;
       }
     },
@@ -153,9 +170,12 @@ export function DataProvider({
       try {
         const result = await activeSource.upsertReference(scope, reference);
         await loadData();
+        toast.success("Reference added");
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to upsert reference");
+        const msg = err instanceof Error ? err.message : "Failed to add reference";
+        setError(msg);
+        toast.error(`Failed to add reference: ${msg}`);
         throw err;
       }
     },
@@ -164,8 +184,11 @@ export function DataProvider({
       try {
         await activeSource.deleteReference(scope, refId);
         await loadData();
+        toast.success("Reference removed");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete reference");
+        const msg = err instanceof Error ? err.message : "Failed to remove reference";
+        setError(msg);
+        toast.error(`Failed to remove reference: ${msg}`);
         throw err;
       }
     },
@@ -179,10 +202,13 @@ export function DataProvider({
       );
       try {
         await activeSource.archiveSession(sessionId);
+        toast.success("Session archived");
       } catch (err) {
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
-        setError(err instanceof Error ? err.message : "Failed to archive session");
+        const msg = err instanceof Error ? err.message : "Failed to archive session";
+        setError(msg);
+        toast.error(`Failed to archive session: ${msg}`);
         throw err;
       }
     },
@@ -192,9 +218,12 @@ export function DataProvider({
       try {
         const result = await activeSource.upsertSessionReference(sessionId, ref);
         await loadData();
+        toast.success("Reference added to session");
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to upsert session reference");
+        const msg = err instanceof Error ? err.message : "Failed to add reference";
+        setError(msg);
+        toast.error(`Failed to add reference: ${msg}`);
         throw err;
       }
     },
@@ -205,7 +234,9 @@ export function DataProvider({
         await activeSource.deleteSessionReference(sessionId, refId);
         await loadData();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete session reference");
+        const msg = err instanceof Error ? err.message : "Failed to remove reference";
+        setError(msg);
+        toast.error(`Failed to remove reference: ${msg}`);
         throw err;
       }
     },
@@ -215,9 +246,12 @@ export function DataProvider({
       try {
         const result = await activeSource.createSession(session, projectId);
         await loadData();
+        toast.success("Session created");
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create session");
+        const msg = err instanceof Error ? err.message : "Failed to create session";
+        setError(msg);
+        toast.error(`Failed to create session: ${msg}`);
         throw err;
       }
     },
@@ -245,20 +279,27 @@ export function DataProvider({
       try {
         const result = await activeSource.upsertProject(project);
         await loadData();
+        toast.success("Project saved");
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to upsert project");
+        const msg = err instanceof Error ? err.message : "Failed to save project";
+        setError(msg);
+        toast.error(`Failed to save project: ${msg}`);
         throw err;
       }
     },
 
     async syncProject(projectId: string): Promise<void> {
       setSyncingProjectId(projectId);
+      const loadingId = toast.loading("Syncing project...");
       try {
         await activeSource.syncProject(projectId);
         await loadData();
+        toast.success("Project synced", { id: loadingId });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to sync project");
+        const msg = err instanceof Error ? err.message : "Failed to sync project";
+        setError(msg);
+        toast.error(`Sync failed: ${msg}`, { id: loadingId });
         throw err;
       } finally {
         // Only clear if still the same project syncing (avoid race conditions)
@@ -280,7 +321,8 @@ export function DataProvider({
       } catch (err) {
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
-        setError(err instanceof Error ? err.message : "Failed to add message");
+        setError(err instanceof Error ? err.message : "Failed to send message");
+        toast.error(`Failed to send message: ${err instanceof Error ? err.message : String(err)}`);
         throw err;
       }
     },
@@ -291,6 +333,7 @@ export function DataProvider({
         await activeSource.startAgent(sessionId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to start agent");
+        toast.error(`Failed to start agent: ${err instanceof Error ? err.message : String(err)}`);
         throw err;
       }
     },
@@ -304,12 +347,57 @@ export function DataProvider({
       );
       try {
         await activeSource.stopAgent(sessionId);
+        toast.success("Agent stopped");
       } catch (err) {
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
-        setError(err instanceof Error ? err.message : "Failed to stop agent");
+        const msg = err instanceof Error ? err.message : "Failed to stop agent";
+        setError(msg);
+        toast.error(`Failed to stop agent: ${msg}`);
         throw err;
       }
+    },
+
+    /** M4.2 — Initiate GitHub OAuth connection, then refresh all data including status. */
+    async connectGitHub(): Promise<{ success: boolean }> {
+      const loadingId = toast.loading("Connecting to GitHub...");
+      try {
+        const result = await activeSource.connectGitHub();
+        // Refresh GitHub connection status after connect attempt
+        activeSource.getGithubStatus().then((status) => {
+          setGithubConnected(status.connected);
+        }).catch(() => {
+          // Silently fail — not critical
+        });
+        toast.success("Connected to GitHub", { id: loadingId });
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to connect to GitHub";
+        setError(msg);
+        toast.error(`GitHub connection failed: ${msg}`, { id: loadingId });
+        throw err;
+      }
+    },
+
+    /** M4.3 — Merge a PR via Octokit and refresh all data. */
+    async mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }> {
+      const loadingId = toast.loading("Merging pull request...");
+      try {
+        const result = await activeSource.mergePR(owner, repo, prNumber);
+        await loadData();
+        toast.success("Pull request merged", { id: loadingId });
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to merge PR";
+        setError(msg);
+        toast.error(`Merge failed: ${msg}`, { id: loadingId });
+        throw err;
+      }
+    },
+
+    /** M4.3 — Open a URL in the system browser via IPC. */
+    async openUrl(url: string): Promise<void> {
+      await activeSource.openUrl(url);
     },
 
     githubConnected,

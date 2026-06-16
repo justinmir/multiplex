@@ -91,6 +91,27 @@ export class GitHubClient {
     }
   }
 
+  /** Merge a PR via Octokit. Returns true on success. */
+  async mergePR(owner: string, repo: string, prNumber: number): Promise<boolean> {
+    const octokit = this.getOctokit();
+    if (!octokit) return false;
+
+    try {
+      await octokit.pulls.merge({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+      return true;
+    } catch (err) {
+      console.error(
+        `GitHubClient.mergePR failed for ${owner}/${repo}#${prNumber}:`,
+        err,
+      );
+      throw err; // Let renderer handle the error
+    }
+  }
+
   /** Fetch reviews for a specific PR. Returns verdict summary. */
   async getReviewVerdict(
     owner: string,

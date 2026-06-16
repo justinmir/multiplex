@@ -6,6 +6,7 @@ import {
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder,
 } from "lucide-react";
 import { Session, PullRequest, ReviewComment, CheckRun, Reference, Workspace } from "../data/mockData";
+import { useDataMutations } from "../../lib/data/DataProvider.js";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { ReferenceRow } from "./tabs/ReferencesTab";
 
@@ -34,6 +35,7 @@ export function SessionDetail({
   projectName, backLabel = "Back", session, prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
 }: Props) {
+  const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
 
   const allFiles = prs.flatMap((p) => (p.files ?? []).map((f) => ({ ...f, _prNumber: p.number, _repo: p.repo })));
@@ -109,7 +111,13 @@ export function SessionDetail({
             {session.status === "running" && (
               <>
                 <span className="ml-1"><SessionStateIndicator status="running" size={14} /></span>
-                <button onClick={onStopAgent} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary">
+                <button
+                  onClick={() => {
+                    if (session) mutations.stopAgent(session.id);
+                    onStopAgent?.();
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary"
+                >
                   <Square className="h-3 w-3" /> Stop
                 </button>
               </>
@@ -181,7 +189,17 @@ export function SessionDetail({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              {railTab === "overview" && <OverviewRail session={session} prs={prs} />}
+              {railTab === "overview" && (
+                <OverviewRail
+                  session={session}
+                  prs={prs}
+                  onMergePR={(owner, repo, prNumber) => mutations.mergePR(owner, repo, prNumber).catch((e) => console.error("Merge failed:", e))}
+                  onOpenGitHub={(pr) => {
+                    const url = `https://github.com/${pr.repo}/pull/${pr.number}`;
+                    mutations.openUrl(url);
+                  }}
+                />
+              )}
               {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={prs.reduce((s, p) => s + p.additions, 0)} totalDels={prs.reduce((s, p) => s + p.deletions, 0)} multiPR={prs.length > 1} />}
               {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} />}
               {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} />}
@@ -225,7 +243,7 @@ export function SessionDetail({
 
 /* ---------- Right-rail panes ---------- */
 
-function OverviewRail({ session, prs }: { session: Session; prs: PullRequest[] }) {
+function OverviewRail({ session, prs, onMergePR, onOpenGitHub }: { session: Session; prs: PullRequest[]; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void }) {
   return (
     <div className="space-y-4 px-4 py-4">
       {/* Workspaces */}
@@ -252,7 +270,7 @@ function OverviewRail({ session, prs }: { session: Session; prs: PullRequest[] }
           <EmptyLine text="No PRs opened yet." />
         ) : (
           <ul className="space-y-2">
-            {prs.map((pr) => <PRSummaryCard key={pr.id} pr={pr} />)}
+            {prs.map((pr) => <PRSummaryCard key={pr.id} pr={pr} onMergePR={onMergePR} onOpenGitHub={onOpenGitHub} />)}
           </ul>
         )}
       </RailBlock>
@@ -271,11 +289,14 @@ function OverviewRail({ session, prs }: { session: Session; prs: PullRequest[] }
   );
 }
 
-function PRSummaryCard({ pr }: { pr: PullRequest }) {
+function PRSummaryCard({ pr, onMergePR, onOpenGitHub }: { pr: PullRequest; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void }) {
   const checksFailing = (pr.checkRuns ?? []).some((c) => c.status === "failure") || pr.checks.failed > 0;
   const checksPending = (pr.checkRuns ?? []).some((c) => c.status === "pending") || pr.checks.pending > 0;
   const verdict = pr.reviewVerdict ?? "pending";
   const canMerge = pr.mergeable === "clean" && verdict === "approved" && !checksFailing && !checksPending && pr.status !== "merged";
+
+  // Parse repo string ("owner/repo") for merge API call
+  const [mergeOwner, mergeRepo] = pr.repo.split("/");
 
   return (
     <li className="overflow-hidden rounded-md border border-border bg-card">
@@ -302,11 +323,18 @@ function PRSummaryCard({ pr }: { pr: PullRequest }) {
       <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border/60 px-3 py-2">
         <VerdictPill verdict={verdict} />
         <CheckSummary pr={pr} />
-        <button className="ml-auto rounded-md border border-border p-1 text-muted-foreground hover:bg-secondary hover:text-foreground" title="Open on GitHub">
+        <button
+          onClick={() => onOpenGitHub?.(pr)}
+          className="ml-auto rounded-md border border-border p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          title="Open on GitHub"
+        >
           <ExternalLink className="h-3 w-3" />
         </button>
         <button
           disabled={!canMerge}
+          onClick={() => {
+            if (canMerge && onMergePR) onMergePR(mergeOwner, mergeRepo ?? "", pr.number);
+          }}
           className={`flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] ${
             canMerge ? "bg-[var(--success)] text-[#0c0d10] hover:opacity-90" : "cursor-not-allowed bg-secondary text-muted-foreground"
           }`}
@@ -748,7 +776,7 @@ function Composer({ session, draft, setDraft, onSend }: { session: Session | nul
         <div className="rounded-lg border border-border bg-input-background focus-within:border-border-strong">
           <textarea
             value={draft} onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onSend?.(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend?.(); } }}
             placeholder={session ? "Reply to the agent…" : "Describe the task. The agent will plan, code, and open PRs across the repos it needs."}
             rows={3}
             className="w-full resize-none bg-transparent px-3.5 py-3 text-[13.5px] placeholder:text-muted-foreground/70 focus:outline-none"
@@ -766,7 +794,7 @@ function Composer({ session, draft, setDraft, onSend }: { session: Session | nul
             <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
               <Paperclip className="h-3 w-3" /> attach
             </button>
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground">⌘↵ to send</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">↵ to send · ⇧↵ newline</span>
             <button
               onClick={onSend}
               disabled={!draft.trim()}
