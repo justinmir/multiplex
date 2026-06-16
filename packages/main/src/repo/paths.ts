@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const DATA_DIR = join(app.getPath("userData"), "multiplex");
 export const DB_PATH = join(DATA_DIR, "db.json");
+export const SQLITE_PATH = join(DATA_DIR, "db.sqlite");
 
 /** Ensure the directory exists. */
 export function ensureDir() {

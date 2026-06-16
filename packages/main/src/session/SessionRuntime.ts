@@ -348,7 +348,7 @@ export class SessionRuntime {
       const existing = await this.repo.getSession(sessionId);
       if (existing && existing.status !== "idle" && existing.status !== "completed") {
         const updated: Session = { ...existing, status: "idle" };
-        await this.repo.upsertSession(updated, null);
+        await this.repo.upsertSession(updated, await this.repo.getSessionProjectId(sessionId));
         this.emitFn("data:changed", { kind: "session" });
       }
     }
@@ -368,8 +368,8 @@ export class SessionRuntime {
       try {
         const existing = await this.repo.getSession(sessionId);
         if (existing && existing.status === "running") {
-          // Mark as idle so it can be resumed later
-          await this.repo.upsertSession({ ...existing, status: "idle" }, null);
+          // Mark as idle so it can be resumed later (preserve project association).
+          await this.repo.upsertSession({ ...existing, status: "idle" }, await this.repo.getSessionProjectId(sessionId));
         }
       } catch { /* ignore save errors during shutdown */ }
     }
@@ -403,9 +403,11 @@ export class SessionRuntime {
       const sessions = await this.repo.listSessions();
       for (const session of sessions) {
         if (session.status === "running") {
-          // Session was running but has no active harness — mark as idle for recovery
+          // Session was running but has no active harness — mark as idle for
+          // recovery, preserving its project association (listSessions returns
+          // project-scoped sessions too, so a blanket null here orphaned them).
           const updated: Session = { ...session, status: "idle" };
-          await this.repo.upsertSession(updated, null);
+          await this.repo.upsertSession(updated, await this.repo.getSessionProjectId(session.id));
           recovered.push(session.id);
         }
       }

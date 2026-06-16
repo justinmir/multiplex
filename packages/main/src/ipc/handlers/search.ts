@@ -1,11 +1,11 @@
 import { handle } from "../router.js";
-import type { JsonRepository } from "../../repo/JsonRepository.js";
+import type { Repository } from "@app/core";
 import type { IpcRes } from "@app/core";
 
 type SearchResult = IpcRes<"search:query">[number];
 
 /** Register the global search handler over real projects, sessions, and PRs (M6.3). */
-export function registerSearchHandlers(repo: JsonRepository) {
+export function registerSearchHandlers(repo: Repository) {
   handle("search:query", async (req) => {
     const q = req.q.trim().toLowerCase();
     if (!q) return [];

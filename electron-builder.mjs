@@ -10,6 +10,10 @@ export default /** @type import('electron-builder').Configuration */
     buildResources: 'buildResources',
   },
   generateUpdatesFilesForAllChannels: true,
+  // @electron/rebuild (run automatically during compile) rebuilds native deps
+  // for Electron's ABI; unpack better-sqlite3 from the asar so its .node binary
+  // is loadable at runtime (only used when the SQLite backend is selected).
+  asarUnpack: ['**/node_modules/better-sqlite3/**'],
   linux: {
     target: ['deb'],
   },
