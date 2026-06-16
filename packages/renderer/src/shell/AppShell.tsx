@@ -135,6 +135,28 @@ export function AppShell() {
     openSession(id);
   };
 
+  // M5.1 — project-scoped session creation
+  const handleCreateProjectSession = async (prompt: string, projectId: string) => {
+    const id = `ss_${Date.now().toString(36)}`;
+    const title = prompt.length > 60 ? prompt.slice(0, 60).trim() + "…" : prompt;
+    const next: Session = {
+      id, title, prompt,
+      status: "running",
+      model: "claude-sonnet-4-6",
+      workspaces: [],
+      startedAt: "just now",
+      createdAtMs: Date.now(),
+      durationMin: 0, tokens: 0, cost: 0,
+      messages: [
+        { role: "user", content: prompt, ts: "just now" },
+        { role: "agent", content: "Spinning up a fresh workspace and getting started.", ts: "just now" },
+      ],
+    };
+    await mutations.createSession(next, projectId);
+    // Navigate to the new session within project context
+    openProject(projectId, id);
+  };
+
   // Resolve PRs for the current standalone session against any project that hosts a matching repo
   const session = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const sessionPRs = session?.linkedPRs
@@ -178,7 +200,7 @@ export function AppShell() {
           />
         )}
         {view === "project" && project && (
-          <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} onSync={() => mutations.syncProject(selectedProjectId)} isSyncing={isSyncing} />
+          <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} onSync={() => mutations.syncProject(selectedProjectId)} isSyncing={isSyncing} onCreateProjectSession={(prompt) => handleCreateProjectSession(prompt, selectedProjectId)} />
         )}
         {view === "session" && session && (
           <TaskView
