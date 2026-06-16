@@ -1,15 +1,20 @@
 import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { JsonRepository } from "../../repo/JsonRepository.js";
-import type { Session, SessionMsg } from "@app/core";
+import type { Session, SessionMsg, SessionStatus } from "@app/core";
 import { deriveSessionStatus } from "../../session/deriveStatus.js";
 
-/** Apply derived status after a session upsert; patch + emit if it changed. */
-async function applyDerived(repo: JsonRepository, updated: Session) {
+/** Apply derived status after a session upsert; patch + emit granular event if it changed. */
+async function applyDerived(repo: JsonRepository, updated: Session): Promise<Session | null> {
   const derived = deriveSessionStatus(updated);
   if (derived !== updated.status) {
-    await repo.upsertSession({ ...updated, status: derived }, null);
+    const patched: Session = { ...updated, status: derived };
+    await repo.upsertSession(patched, null);
+    // M6.2 — emit granular status event for targeted renderer updates
+    emit("session-status-changed", { sessionId: patched.id, status: derived });
+    return patched;
   }
+  return null;
 }
 
 /** Register session message + agent workflow IPC handlers (M3.4). */
