@@ -27,14 +27,62 @@ export class InMemoryRepository implements Repository {
     return `${prefix}_${++this.counter}`;
   }
 
+  // ---- hydration ----
+  // Notes, references, activity, and project↔session links live in dedicated
+  // maps (the single source of truth). The Project/Session objects in
+  // `this.projects`/`this.sessions` only carry their own scalar fields; their
+  // collection arrays must be rebuilt from the maps on every read, otherwise
+  // freshly-added notes/refs/sessions are persisted but never surfaced.
+
+  protected getNotesSync(projectId: string): Note[] {
+    const prefix = `${projectId}::`;
+    const out: Note[] = [];
+    for (const [key, note] of this.notes) if (key.startsWith(prefix)) out.push({ ...note });
+    return out;
+  }
+
+  protected getReferencesSync(scope: RefScope): Reference[] {
+    const prefix = "projectId" in scope ? `proj:${scope.projectId}::` : `sess:${scope.sessionId}::`;
+    const out: Reference[] = [];
+    for (const [key, ref] of this.references) if (key.startsWith(prefix)) out.push({ ...ref });
+    return out;
+  }
+
+  protected getProjectSessionsSync(projectId: string): Session[] {
+    const out: Session[] = [];
+    for (const [sid, pid] of this.sessionProjectId) {
+      if (pid === projectId) {
+        const s = this.sessions.get(sid);
+        if (s) out.push(this.hydrateSession(s));
+      }
+    }
+    return out;
+  }
+
+  /** Return a session with its scoped references rebuilt from the map. */
+  protected hydrateSession(s: Session): Session {
+    return { ...s, references: this.getReferencesSync({ sessionId: s.id }) };
+  }
+
+  /** Return a project with sessions/notes/references/activity rebuilt from the maps. */
+  protected hydrateProject(p: Project): Project {
+    return {
+      ...p,
+      sessions: this.getProjectSessionsSync(p.id),
+      notes: this.getNotesSync(p.id),
+      references: this.getReferencesSync({ projectId: p.id }),
+      activity: (this.activity.get(p.id) ?? []).map((a) => ({ ...a })),
+    };
+  }
+
   // ---- projects ----
   async listProjects(): Promise<Project[]> {
-    return Array.from(this.projects.values()).map((p) => ({ ...p }));
+    return Array.from(this.projects.values()).map((p) => this.hydrateProject(p));
   }
 
   async getProject(id: string): Promise<Project | null> {
     const p = this.projects.get(id);
-    return p ? { ...p } : null;
+    return p ? this.hydrateProject(p) : null;
   }
 
   async upsertProject(p: Project): Promise<Project> {
@@ -47,23 +95,27 @@ export class InMemoryRepository implements Repository {
     const all = Array.from(this.sessions.values());
     // No filter or undefined → return all sessions
     if (opts?.projectId === undefined) {
-      return all.map((s) => ({ ...s }));
+      return all.map((s) => this.hydrateSession(s));
     }
     // Explicitly null → return only standalone sessions (no project association)
     if (opts.projectId === null) {
       return all
         .filter((s) => this.sessionProjectId.get(s.id) === null)
-        .map((s) => ({ ...s }));
+        .map((s) => this.hydrateSession(s));
     }
     // Specific projectId string → filter to that project's sessions
     return all
       .filter((s) => this.sessionProjectId.get(s.id) === opts!.projectId)
-      .map((s) => ({ ...s }));
+      .map((s) => this.hydrateSession(s));
   }
 
   async getSession(id: string): Promise<Session | null> {
     const s = this.sessions.get(id);
-    return s ? { ...s } : null;
+    return s ? this.hydrateSession(s) : null;
+  }
+
+  async getSessionProjectId(id: string): Promise<string | null> {
+    return this.sessionProjectId.get(id) ?? null;
   }
 
   async upsertSession(s: Session, projectId: string | null): Promise<Session> {
@@ -142,20 +194,20 @@ export class InMemoryRepository implements Repository {
     this.sessions.set(id, { ...s, archived: true });
   }
 
-  /** Synchronously list sessions with no project association (standalone). */
+  /** Synchronously list standalone sessions (no project), hydrated with references. */
   protected listStandaloneSessionsSync(): Session[] {
     const result: Session[] = [];
     for (const [sid, projId] of this.sessionProjectId) {
       if (projId === null) {
         const s = this.sessions.get(sid);
-        if (s) result.push(s);
+        if (s) result.push(this.hydrateSession(s));
       }
     }
     return result;
   }
 
-  /** Synchronously list all projects. */
+  /** Synchronously list all projects, hydrated from the maps (for persistence). */
   protected listProjectsSync(): Project[] {
-    return Array.from(this.projects.values());
+    return Array.from(this.projects.values()).map((p) => this.hydrateProject(p));
   }
 }

@@ -191,35 +191,39 @@ export function AppShell() {
   }, [selectedSessionId]);
 
   useSessionStream(session?.id ?? null, (event) => {
-    if (!session) return;
-    switch (event.type) {
-      case "message_delta": {
-        // Append delta text to the last streaming message for this sessionId
-        setStreamingMessages((prev) => {
-          const next = new Map(prev);
-          const existing = next.get("current") ?? { role: "agent", content: "", ts: new Date().toISOString() };
-          next.set("current", { ...existing, content: existing.content + event.delta });
-          return next;
-        });
-        break;
-      }
-      case "message": {
-        // Final message arrived — the data layer will pick it up on next refresh.
-        // Clear streaming overlay so we don't show stale partial text.
-        setStreamingMessages(new Map());
-        break;
-      }
+    if (event.type === "message_delta") {
+      // Accumulate streamed text into the live overlay bubble.
+      setStreamingMessages((prev) => {
+        const next = new Map(prev);
+        const existing = next.get("current") ?? { role: "agent", content: "", ts: new Date().toISOString() };
+        next.set("current", { ...existing, content: existing.content + event.delta });
+        return next;
+      });
     }
+    // NOTE: we deliberately do NOT clear the overlay on "message"/"done". The
+    // overlay is cleared (below) only once the persisted agent message has
+    // actually arrived via data:changed — otherwise the streamed text would
+    // vanish in the gap between the event and the reload.
   });
 
-  // Merge streaming deltas into effective messages for display
+  // Once the persisted session ends with an agent message, the turn's output is
+  // safely in `session.messages`; drop the overlay so we don't show it twice.
+  const lastPersisted = session?.messages[session.messages.length - 1];
+  const persistedEndsWithAgent = lastPersisted?.role === "agent";
+  useEffect(() => {
+    if (persistedEndsWithAgent && streamingMessages.size > 0) {
+      setStreamingMessages(new Map());
+    }
+  }, [persistedEndsWithAgent, streamingMessages.size]);
+
+  // Show the overlay only while the agent's reply hasn't been persisted yet,
+  // so the live stream transitions seamlessly into the saved message.
+  const showOverlay = !!session && streamingMessages.size > 0 && !persistedEndsWithAgent;
   const effectiveSession = session ? {
     ...session,
-    messages: [
-      ...(streamingMessages.size > 0
-        ? [...session.messages, streamingMessages.get("current")!]
-        : session.messages),
-    ],
+    messages: showOverlay
+      ? [...session.messages, streamingMessages.get("current")!]
+      : session.messages,
   } : null;
 
   // Determine if we're inside a project session view (for sidebar highlight)

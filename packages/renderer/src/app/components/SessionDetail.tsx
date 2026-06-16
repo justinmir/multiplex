@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft, Send, GitBranch, Cpu, Square, Sparkles, Paperclip, Wrench, User, Bot,
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
@@ -61,6 +61,9 @@ export function SessionDetail({
   const [railOpen, setRailOpen] = useState<boolean>(!!session);
   const [railTab, setRailTab] = useState<RailTab>(initialRailTab);
   const [draft, setDraft] = useState("");
+  // Bumped when the composer's "add reference" is clicked, to auto-open the
+  // add form in the References rail.
+  const [refAddTick, setRefAddTick] = useState(0);
 
   const railTabs: { id: RailTab; label: string; icon: any; count?: number; tone?: string }[] = [
     { id: "overview", label: "Overview", icon: LayoutGrid, count: prs.length || undefined },
@@ -153,6 +156,7 @@ export function SessionDetail({
             currentModel={currentModel ?? session?.model}
             availableModels={availableModels}
             onSelectModel={onSelectModel}
+            onAddReference={session && onAddReference ? () => { openRailAt("references"); setRefAddTick((t) => t + 1); } : undefined}
             onSend={() => {
               const v = draft.trim();
               if (!v) return;
@@ -215,7 +219,7 @@ export function SessionDetail({
               {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={prs.reduce((s, p) => s + p.additions, 0)} totalDels={prs.reduce((s, p) => s + p.deletions, 0)} multiPR={prs.length > 1} />}
               {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} onSendMessage={onSendMessage} session={session} />}
               {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} />}
-              {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} />}
+              {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} openAddTick={refAddTick} />}
             </div>
           </aside>
         ) : (
@@ -675,10 +679,14 @@ function CheckRow({ run, divider, multiPR }: { run: RunWithMeta; divider: boolea
 
 /* ---------- References rail ---------- */
 
-function ReferencesRail({ references, onAdd }: { references: Reference[]; onAdd?: (r: Reference) => void }) {
+function ReferencesRail({ references, onAdd, openAddTick }: { references: Reference[]; onAdd?: (r: Reference) => void; openAddTick?: number }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
+  // Open the add form when the composer's "add reference" button is clicked.
+  useEffect(() => {
+    if (openAddTick && openAddTick > 0) setAdding(true);
+  }, [openAddTick]);
   const submit = () => {
     if (!title.trim()) return;
     onAdd?.({
@@ -806,7 +814,7 @@ function NewSessionPane({ projectName, starterPrompts, draft, setDraft }: { proj
   );
 }
 
-function Composer({ session, draft, setDraft, currentModel, availableModels, onSelectModel, onSend }: { session: Session | null; draft: string; setDraft: (v: string) => void; currentModel?: string; availableModels?: Array<{ id: string; label?: string; provider?: string }>; onSelectModel?: (modelId: string) => void; onSend?: () => void }) {
+function Composer({ session, draft, setDraft, currentModel, availableModels, onSelectModel, onAddReference, onSend }: { session: Session | null; draft: string; setDraft: (v: string) => void; currentModel?: string; availableModels?: Array<{ id: string; label?: string; provider?: string }>; onSelectModel?: (modelId: string) => void; onAddReference?: () => void; onSend?: () => void }) {
   const [modelOpen, setModelOpen] = useState(false);
   const displayModel = currentModel ?? "default";
   const modelLabel = availableModels?.find((m) => m.id === currentModel)?.label ?? currentModel ?? "default";
@@ -853,13 +861,26 @@ function Composer({ session, draft, setDraft, currentModel, availableModels, onS
                 <Cpu className="h-3 w-3" /> {displayModel}
               </button>
             )}
-            <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <button
+              disabled
+              title="Repo & branch selection — coming soon"
+              className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground/50 cursor-not-allowed"
+            >
               <GitBranch className="h-3 w-3" /> repos & branches
             </button>
-            <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <button
+              onClick={onAddReference}
+              disabled={!onAddReference}
+              title={onAddReference ? "Add a reference for the agent" : "Available once the session has started"}
+              className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/50 disabled:hover:bg-transparent"
+            >
               <BookOpen className="h-3 w-3" /> add reference
             </button>
-            <button className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+            <button
+              disabled
+              title="File attachments — coming soon"
+              className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground/50 cursor-not-allowed"
+            >
               <Paperclip className="h-3 w-3" /> attach
             </button>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">↵ to send · ⇧↵ newline</span>

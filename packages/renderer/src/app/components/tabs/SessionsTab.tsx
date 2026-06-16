@@ -3,6 +3,7 @@ import { Project } from "../../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo, sessionWeight } from "../SessionStateBadge";
 import { SessionDetail } from "../SessionDetail";
 import { formatRelativeTime } from "../../../lib/format/time.js";
+import { useDataMutations } from "../../../lib/data/DataProvider.js";
 
 interface Props {
   project: Project;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) {
+  const mutations = useDataMutations();
   const close = () => onOpen(null);
 
   if (openId === "new") {
@@ -38,6 +40,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
         session={session}
         prs={prs}
         references={session.references ?? []}
+        onAddReference={(r) => mutations.upsertSessionReference(session.id, r)}
         onClose={close}
       />
     );

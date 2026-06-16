@@ -37,6 +37,9 @@ export class SessionRuntime {
   private concurrencyConfig: ConcurrencyConfig;
   /** Crash detection timer. */
   private crashTimer: ReturnType<typeof setInterval> | null = null;
+  /** Per-session promise chain that serializes repo read-modify-write so
+   *  concurrently-arriving harness events can't clobber each other's writes. */
+  private persistChains = new Map<string, Promise<void>>();
 
   constructor(
     repo: Repository,
@@ -110,25 +113,15 @@ export class SessionRuntime {
     await this.repo.upsertSession(newSession, input.projectId ?? null);
     this.emitFn("data:changed", { kind: "session" });
 
-    // Start the harness run
     const cwd = input.cwd ?? process.env.HOME ?? "/tmp";
-    const runInput = {
-      sessionId,
-      prompt: input.prompt,
-      model: input.model,
-      cwd,
-      workspaces: [],
-    };
-
     try {
-      const run = await harness.start(runInput, (event) => this.onHarnessEvent(sessionId, event));
-      this.runs.set(sessionId, run);
-      this.lastActivity.set(sessionId, Date.now());
+      await this.beginRun(harness, { sessionId, prompt: input.prompt, model, cwd });
     } catch (err) {
       // Harness failed to start — mark session as failed
       const existing = await this.repo.getSession(sessionId);
       if (existing) {
         await this.repo.upsertSession({ ...existing, status: "failed" }, input.projectId ?? null);
+        this.emitFn("data:changed", { kind: "session" });
       }
       throw err;
     }
@@ -136,25 +129,50 @@ export class SessionRuntime {
     return { sessionId };
   }
 
-  /** Send a follow-up message to an existing running session. */
+  /** Start a harness run for a session id and register it. */
+  private async beginRun(
+    harness: Harness,
+    input: { sessionId: string; prompt: string; model?: string; cwd: string },
+  ): Promise<void> {
+    const run = await harness.start(
+      { sessionId: input.sessionId, prompt: input.prompt, model: input.model, cwd: input.cwd, workspaces: [] },
+      (event) => this.onHarnessEvent(input.sessionId, event),
+    );
+    this.runs.set(input.sessionId, run);
+    this.lastActivity.set(input.sessionId, Date.now());
+  }
+
+  /** Send a follow-up message to a session. If the in-memory run is gone (turn
+   *  ended, harness crashed, or the app restarted), transparently revive a new
+   *  run for the existing session instead of failing — sessions feel durable. */
   async sendMessage(sessionId: string, text: string): Promise<void> {
-    const run = this.runs.get(sessionId);
-    if (!run) {
-      throw new Error(`No active run for session "${sessionId}" — start the agent first`);
-    }
-
-    // Persist the user message immediately
+    // Persist the user message first so it shows immediately and survives revival.
     const existing = await this.repo.getSession(sessionId);
-    if (existing) {
-      const userMsg: SessionMsg = { role: "user", content: text, ts: new Date().toISOString() };
-      const updated: Session = { ...existing, messages: [...existing.messages, userMsg] };
-      await this.repo.upsertSession(updated, null);
-      this.emitFn("data:changed", { kind: "session" });
+    if (!existing) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const userMsg: SessionMsg = { role: "user", content: text, ts: new Date().toISOString() };
+    const projectId = await this.repo.getSessionProjectId(existing.id);
+    await this.repo.upsertSession(
+      { ...existing, messages: [...existing.messages, userMsg], status: "running" },
+      projectId,
+    );
+    this.emitFn("data:changed", { kind: "session" });
+
+    const run = this.runs.get(sessionId);
+    if (run) {
+      await run.send(text);
+      this.lastActivity.set(sessionId, Date.now());
+      return;
     }
 
-    // Forward to harness and update activity timestamp
-    await run.send(text);
-    this.lastActivity.set(sessionId, Date.now());
+    // No live run — revive one. The new run uses this message as its prompt.
+    const settings = this.settingsFn();
+    const harness = getHarness(settings);
+    if (!harness) throw new Error(`No harness registered for id "${settings.harnessId ?? "mock"}"`);
+    const model = existing.model || settings.defaultModel;
+    const cwd = process.env.HOME ?? "/tmp";
+    await this.beginRun(harness, { sessionId, prompt: text, model, cwd });
   }
 
   /** Stop the agent for a session. */
@@ -256,6 +274,15 @@ export class SessionRuntime {
 
   private async handleCrashedSession(sessionId: string): Promise<void> {
     try {
+      // Only an actively-running session can crash. A completed/idle/awaiting
+      // session intentionally keeps its run alive for follow-up turns — don't
+      // tear it down just because it's been quiet.
+      const existing = await this.repo.getSession(sessionId);
+      if (!existing || existing.status !== "running") {
+        this.lastActivity.set(sessionId, Date.now());
+        return;
+      }
+
       const run = this.runs.get(sessionId);
       if (run) {
         // Try to stop the crashed session gracefully first
@@ -264,11 +291,11 @@ export class SessionRuntime {
       }
 
       // Mark as failed and notify renderer
-      const existing = await this.repo.getSession(sessionId);
-      if (existing && existing.status === "running") {
+      if (existing.status === "running") {
         const errorMsg: SessionMsg = { role: "agent", content: "[Error] Session timed out — no activity detected", ts: new Date().toISOString() };
         const updated: Session = { ...existing, status: "failed", messages: [...existing.messages, errorMsg] };
-        await this.repo.upsertSession(updated, null);
+        const projectId = await this.repo.getSessionProjectId(sessionId);
+        await this.repo.upsertSession(updated, projectId);
         this.emitFn("data:changed", { kind: "session" });
         this.emitFn(`session:${sessionId}:event`, { type: "done", reason: "failed" } as HarnessEvent);
       }
@@ -280,13 +307,41 @@ export class SessionRuntime {
 
   // ---- Internal: handle events from a harness run ----
 
-  private async onHarnessEvent(sessionId: string, event: HarnessEvent): Promise<void> {
-    // Update activity timestamp for crash detection
+  /**
+   * Handle a harness event. The live-stream emit and run-lifecycle bookkeeping
+   * happen synchronously; the repo read-modify-write is pushed onto a per-session
+   * serial queue so concurrently-arriving events (message, usage, done) can't
+   * each read a stale session and clobber one another's writes.
+   */
+  private onHarnessEvent(sessionId: string, event: HarnessEvent): void {
     this.lastActivity.set(sessionId, Date.now());
 
-    // Emit raw harness event to renderer for live streaming
+    // Emit raw harness event to renderer for live streaming (order-preserving).
     this.emitFn(`session:${sessionId}:event`, event);
 
+    // Run-lifecycle is in-memory state, not repo state — handle it immediately.
+    if (event.type === "done" && event.reason !== "completed") {
+      this.runs.delete(sessionId);
+      this.lastActivity.delete(sessionId);
+    } else if (event.type === "error" && !event.recoverable) {
+      this.runs.delete(sessionId);
+      this.lastActivity.delete(sessionId);
+    }
+
+    this.enqueuePersist(sessionId, () => this.persistEvent(sessionId, event));
+  }
+
+  /** Serialize repo mutations per session via a promise chain. */
+  private enqueuePersist(sessionId: string, mutate: () => Promise<void>): void {
+    const prev = this.persistChains.get(sessionId) ?? Promise.resolve();
+    const next = prev.then(mutate, mutate).catch((err) => {
+      console.error(`[SessionRuntime] persist failed for ${sessionId}:`, err);
+    });
+    this.persistChains.set(sessionId, next);
+  }
+
+  /** Apply one harness event to the persisted session (runs inside the queue). */
+  private async persistEvent(sessionId: string, event: HarnessEvent): Promise<void> {
     const existing = await this.repo.getSession(sessionId);
     if (!existing) return;
 
@@ -303,56 +358,18 @@ export class SessionRuntime {
         break;
       }
 
-      case "message_delta": {
-        // Append delta to the last agent message, or create one
-        const lastMsg = updated.messages[updated.messages.length - 1];
-        if (lastMsg && lastMsg.role === "agent" && !lastMsg.content.includes("[STREAMING]")) {
-          updated.messages = [
-            ...updated.messages.slice(0, -1),
-            { ...lastMsg, content: lastMsg.content + event.delta },
-          ];
-          persist = true;
-        } else if (!lastMsg || lastMsg.role !== "agent") {
-          updated.messages = [
-            ...updated.messages,
-            { role: "agent", content: "[STREAMING]" + event.delta, ts: new Date().toISOString() },
-          ];
-          persist = true;
-        }
+      // Live streaming is rendered by the renderer overlay from the raw event;
+      // per-delta persistence is intentionally skipped (one DB write per token).
+      case "message_delta":
+      case "tool_use":
         break;
-      }
 
       case "message": {
-        // Final message — replace the streaming placeholder with actual content
-        if (event.final) {
-          const lastMsg = updated.messages[updated.messages.length - 1];
-          if (lastMsg && lastMsg.role === "agent" && lastMsg.content.startsWith("[STREAMING]")) {
-            updated.messages = [
-              ...updated.messages.slice(0, -1),
-              { role: event.role, content: event.content, ts: new Date().toISOString() },
-            ];
-            persist = true;
-          } else if (!lastMsg || lastMsg.role !== "agent") {
-            updated.messages = [
-              ...updated.messages,
-              { role: event.role, content: event.content, ts: new Date().toISOString() },
-            ];
-            persist = true;
-          }
-        } else {
-          // Non-final message (e.g. tool output) — append as-is
-          updated.messages = [
-            ...updated.messages,
-            { role: event.role, content: event.content, ts: new Date().toISOString() },
-          ];
-          persist = true;
-        }
-        break;
-      }
-
-      case "tool_use": {
-        // Emit to renderer for live display (don't persist to main messages)
-        this.emitFn(`session:${sessionId}:event`, event);
+        updated.messages = [
+          ...updated.messages,
+          { role: event.role, content: event.content, ts: new Date().toISOString() },
+        ];
+        persist = true;
         break;
       }
 
@@ -368,8 +385,6 @@ export class SessionRuntime {
         const newStatus = deriveSessionStatusFromEvent(event);
         if (newStatus) {
           updated.status = newStatus;
-          this.runs.delete(sessionId);
-          this.lastActivity.delete(sessionId);
           persist = true;
         }
         break;
@@ -377,26 +392,23 @@ export class SessionRuntime {
 
       case "awaiting_input": {
         updated.status = "awaiting_input";
-        this.emitFn(`session:${sessionId}:status`, { sessionId, status: "awaiting_input" });
         persist = true;
         break;
       }
 
       case "error": {
-        const errorMsg: SessionMsg = { role: "agent", content: `[Error] ${event.message}`, ts: new Date().toISOString() };
-        updated.messages = [...updated.messages, errorMsg];
-        if (!event.recoverable) {
-          updated.status = "failed";
-          this.runs.delete(sessionId);
-          this.lastActivity.delete(sessionId);
-        }
+        updated.messages = [
+          ...updated.messages,
+          { role: "agent", content: `[Error] ${event.message}`, ts: new Date().toISOString() },
+        ];
+        if (!event.recoverable) updated.status = "failed";
         persist = true;
         break;
       }
 
       case "workspace": {
         const existingWs = updated.workspaces.find(
-          (w) => w.repo === event.workspace.repo && w.branch === event.workspace.branch
+          (w) => w.repo === event.workspace.repo && w.branch === event.workspace.branch,
         );
         if (!existingWs) {
           updated.workspaces = [...updated.workspaces, event.workspace];
@@ -408,23 +420,14 @@ export class SessionRuntime {
       // pr events are forwarded but not persisted to session for now
     }
 
-    if (persist) {
-      // Apply derived status from PR signals after our update
-      const refinedStatus = applyDerivedFn(updated);
-      if (refinedStatus !== updated.status) {
-        updated = { ...updated, status: refinedStatus };
-      }
-      await this.repo.upsertSession(updated, null);
-      this.emitFn(`session:${sessionId}:status`, { sessionId, status: updated.status });
-      this.emitFn("data:changed", { kind: "session" });
-    }
-  }
+    if (!persist) return;
 
-  private async applyDerived(session: Session): Promise<Session> {
-    const derived = applyDerivedFn(session);
-    if (derived !== session.status) {
-      return { ...session, status: derived };
-    }
-    return session;
+    // Refine status from PR signals, then persist preserving project association.
+    const refinedStatus = applyDerivedFn(updated);
+    if (refinedStatus !== updated.status) updated = { ...updated, status: refinedStatus };
+    const projectId = await this.repo.getSessionProjectId(sessionId);
+    await this.repo.upsertSession(updated, projectId);
+    this.emitFn(`session:${sessionId}:status`, { sessionId, status: updated.status });
+    this.emitFn("data:changed", { kind: "session" });
   }
 }

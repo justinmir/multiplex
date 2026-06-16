@@ -2,6 +2,7 @@ import Store from "electron-store";
 import type { AppSettingsData } from "@app/core";
 
 const defaultSettings: AppSettingsData = {
+  harnessId: "opencode",
   repoRoots: [],
   intelligenceEnabled: false,
   autoSynthesizeOnActivity: true,
