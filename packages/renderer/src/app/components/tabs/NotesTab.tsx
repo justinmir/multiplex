@@ -1,5 +1,7 @@
-import { Plus, FileText, ArrowLeft } from "lucide-react";
-import { Project } from "../../data/mockData";
+import { useState } from "react";
+import { Plus, FileText, ArrowLeft, Loader2 } from "lucide-react";
+import type { Note, Project } from "@app/core";
+import { useDataMutations } from "../../../lib/data/DataProvider.js";
 
 interface Props {
   project: Project;
@@ -8,7 +10,52 @@ interface Props {
 }
 
 export function NotesTab({ project, focusedId, onFocus }: Props) {
+  const mutations = useDataMutations();
   const focused = focusedId ? project.notes.find((n) => n.id === focusedId) : null;
+
+  // ---- Note creation form state ----
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [newTags, setNewTags] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCreateNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || submitting) return;
+
+    const tags = newTags.split(",").map((t) => t.trim()).filter(Boolean);
+
+    const note: Note = {
+      id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: newTitle.trim(),
+      body: newBody.trim() || "No content.",
+      author: "you",
+      updatedAt: new Date().toISOString(),
+      tags: tags.length > 0 ? tags : [],
+    };
+
+    setSubmitting(true);
+    try {
+      await mutations.upsertNote(project.id, note);
+      // Reset form and close editor on success
+      setNewTitle("");
+      setNewBody("");
+      setNewTags("");
+      setIsCreating(false);
+    } catch (err) {
+      console.error("Failed to create note:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelCreate = () => {
+    setNewTitle("");
+    setNewBody("");
+    setNewTags("");
+    setIsCreating(false);
+  };
 
   if (focused) {
     return (
@@ -47,13 +94,61 @@ export function NotesTab({ project, focusedId, onFocus }: Props) {
             Long-lived context the agent reads on every run — design decisions, open questions, runbooks.
           </p>
         </div>
-        <button className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-secondary">
-          <Plus className="h-3.5 w-3.5" />
-          New note
-        </button>
+
+        {isCreating ? (
+          <form onSubmit={handleCreateNote} className="flex flex-col gap-2 w-full max-w-sm">
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Title"
+              required
+              className="bg-transparent text-[12.5px] placeholder:text-muted-foreground/70 focus:outline-none border-b border-border pb-1"
+            />
+            <textarea
+              value={newBody}
+              onChange={(e) => setNewBody(e.target.value)}
+              placeholder="Content (markdown)"
+              rows={4}
+              className="resize-none bg-transparent text-[12.5px] placeholder:text-muted-foreground/70 focus:outline-none border-b border-border pb-1"
+            />
+            <input
+              value={newTags}
+              onChange={(e) => setNewTags(e.target.value)}
+              placeholder="Tags (comma-separated)"
+              className="bg-transparent font-mono text-[11.5px] placeholder:text-muted-foreground/70 focus:outline-none border-b border-border pb-1"
+            />
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                type="submit"
+                disabled={!newTitle.trim() || submitting}
+                className="rounded-md bg-accent px-3 py-1 font-mono text-[10.5px] text-accent-foreground hover:bg-accent/90 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5"
+              >
+                {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelCreate}
+                disabled={submitting}
+                className="rounded-md px-3 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            onClick={() => setIsCreating(true)}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-secondary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New note
+          </button>
+        )}
       </div>
 
-      {project.notes.length === 0 ? (
+      {project.notes.length === 0 && !isCreating ? (
         <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center">
           <FileText className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
           <p className="text-[13px] text-muted-foreground">No notes yet.</p>
