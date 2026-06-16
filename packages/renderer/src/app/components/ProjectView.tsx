@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MoreHorizontal, Play, Star, RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import { Project } from "../data/mockData";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SessionsTab } from "./tabs/SessionsTab";
@@ -72,12 +72,6 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
                 {isSyncing ? "Syncing..." : "Sync PRs"}
               </button>
             )}
-            <button className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <Star className="h-3.5 w-3.5" />
-            </button>
-            <button className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
             <button
               onClick={() => openSession("new")}
               className="ml-1 flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12.5px] text-accent-foreground hover:bg-accent/90"

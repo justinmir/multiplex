@@ -27,6 +27,8 @@ interface Props {
   onOpenSettings: () => void;
   /** M5.2 — callback to open the Create Project dialog */
   onOpenCreateProject?: () => void;
+  /** M6.3 — open the global search (⌘K) palette */
+  onOpenSearch?: () => void;
 }
 
 const windowOrder: SessionWindow[] = ["last_24h", "last_7d", "last_30d", "older", "archived"];
@@ -38,6 +40,7 @@ export function ProjectsSidebar({
   isProjectSessionUnread, isStandaloneSessionUnread,
   onOpenSettings,
   onOpenCreateProject,
+  onOpenSearch,
 }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({
     [selectedProjectId]: true,
@@ -68,14 +71,15 @@ export function ProjectsSidebar({
       </div>
 
       <div className="px-3 pb-3">
-        <div className="flex items-center gap-2 rounded-md border border-border bg-input-background px-2.5 py-1.5">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="flex w-full items-center gap-2 rounded-md border border-border bg-input-background px-2.5 py-1.5 text-left hover:border-border-strong"
+        >
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            placeholder="Search projects, sessions, PRs"
-            className="w-full bg-transparent text-[12.5px] placeholder:text-muted-foreground/70 focus:outline-none"
-          />
+          <span className="w-full text-[12.5px] text-muted-foreground/70">Search projects, sessions, PRs</span>
           <span className="font-mono text-[10px] text-muted-foreground">⌘K</span>
-        </div>
+        </button>
       </div>
 
       <nav className="px-2 pb-2">

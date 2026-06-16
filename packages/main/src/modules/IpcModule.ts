@@ -13,6 +13,7 @@ import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js"
 import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 import { registerRepoHandlers } from "../ipc/handlers/repos.js";
+import { registerSearchHandlers } from "../ipc/handlers/search.js";
 import { registerChangesHandlers } from "../ipc/handlers/changes.js";
 import { registerPrHandlers } from "../ipc/handlers/pr.js";
 import { WorkspaceManager } from "../session/WorkspaceManager.js";
@@ -97,6 +98,9 @@ export function createIpcModule(): AppModule {
 
       // M-C2: Repo catalog (registry of available repos the agent may declare)
       registerRepoHandlers();
+
+      // M6.3: Global search over real projects, sessions, and PRs
+      registerSearchHandlers(repo);
     },
   };
 }
