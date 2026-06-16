@@ -6,6 +6,7 @@ import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { SettingsDialog } from "../app/components/SettingsDialog";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
+import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import type { Session, Reference, SessionMsg } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
@@ -57,6 +58,23 @@ export function AppShell() {
 
   // M5.2 — Create project dialog state
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+
+  // M6.3 — Global search palette (⌘K)
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+      if (e.key === "Escape") {
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Initialize selected project and unread state once when data first loads
   useEffect(() => {
@@ -227,6 +245,24 @@ export function AppShell() {
 
       {/* M5.2 — Create project dialog */}
       <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} />
+
+      {/* M6.3 — Global search palette (⌘K) */}
+      <SearchPalette
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        projects={projects}
+        standaloneSessions={sessions}
+        onSelectProject={(id, sid) => openProject(id, sid)}
+        onSelectSession={(sessionId, projectId) => {
+          if (projectId) {
+            // Project-scoped session — navigate within project context
+            openProject(projectId, sessionId);
+          } else {
+            // Standalone session
+            openSession(sessionId);
+          }
+        }}
+      />
     </div>
   );
 }
