@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, ExternalLink, Sparkles } from "lucide-react";
 import { Reference } from "../../data/mockData";
 import { ReferenceKindIcon, referenceKindLabel } from "../ReferenceKindIcon";
+import { formatRelativeTime } from "../../../lib/format/time.js";
 
 interface Props {
   references: Reference[];
@@ -56,7 +57,7 @@ export function ReferenceRow({ reference, divider, compact }: { reference: Refer
           </div>
         )}
       </div>
-      <span className="font-mono text-[10.5px] text-muted-foreground">{reference.addedAt}</span>
+      <span className="font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(reference.addedAt)}</span>
       {reference.url ? (
         <a href={reference.url} className="rounded-sm p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
           <ExternalLink className="h-3 w-3" />

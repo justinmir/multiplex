@@ -2,6 +2,7 @@ import { Plus, Terminal, ChevronRight, GitPullRequest } from "lucide-react";
 import { Project } from "../../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo, sessionWeight } from "../SessionStateBadge";
 import { SessionDetail } from "../SessionDetail";
+import { formatRelativeTime } from "../../../lib/format/time.js";
 
 interface Props {
   project: Project;
@@ -97,7 +98,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
                   {s.status !== "running" && (
                     <>
                       <span className="text-muted-foreground/40">·</span>
-                      <span>started {s.startedAt}</span>
+                      <span>started {formatRelativeTime(s.createdAtMs)}</span>
                     </>
                   )}
                 </div>

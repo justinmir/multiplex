@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, FileText, ArrowLeft, Loader2 } from "lucide-react";
 import type { Note, Project } from "@app/core";
 import { useDataMutations } from "../../../lib/data/DataProvider.js";
+import { formatRelativeTime } from "../../../lib/format/time.js";
 
 interface Props {
   project: Project;
@@ -69,7 +70,7 @@ export function NotesTab({ project, focusedId, onFocus }: Props) {
         <article className="rounded-lg border border-border bg-card p-6">
           <div className="mb-3 flex items-start justify-between gap-4">
             <h2 className="text-foreground">{focused.title}</h2>
-            <span className="font-mono text-[10.5px] text-muted-foreground">{focused.updatedAt}</span>
+            <span className="font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(focused.updatedAt)}</span>
           </div>
           <p className="text-[14px] leading-relaxed text-foreground/90">{focused.body}</p>
           <div className="mt-5 flex items-center gap-2 border-t border-border pt-3">
@@ -163,7 +164,7 @@ export function NotesTab({ project, focusedId, onFocus }: Props) {
             >
               <div className="mb-2 flex items-start justify-between">
                 <h3 className="text-foreground">{n.title}</h3>
-                <span className="font-mono text-[10.5px] text-muted-foreground">{n.updatedAt}</span>
+                <span className="font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(n.updatedAt)}</span>
               </div>
               <p className="text-[13px] leading-relaxed text-muted-foreground">{n.body}</p>
               <div className="mt-3 flex items-center gap-2">

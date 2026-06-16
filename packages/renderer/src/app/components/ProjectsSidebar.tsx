@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Project, Session, bucketForSession, sessionWindowLabels, SessionWindow } from "../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
+import { formatRelativeTime } from "../../lib/format/time.js";
 
 interface Props {
   projects: Project[];
@@ -233,7 +234,7 @@ export function ProjectsSidebar({
                                 {s.status === "running" ? (
                                   <SessionStateIndicator status="running" size={10} />
                                 ) : (
-                                  <span className="font-mono text-[10px] text-muted-foreground">{s.startedAt}</span>
+                                  <span className="font-mono text-[10px] text-muted-foreground">{formatRelativeTime(s.createdAtMs)}</span>
                                 )}
                               </div>
                               {sessionStateInfo[s.status].tone !== "neutral" && (

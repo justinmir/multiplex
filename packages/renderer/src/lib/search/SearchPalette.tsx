@@ -17,6 +17,13 @@ interface SearchResult {
   subtitle?: string;
   status?: SessionStatus;
   projectId?: string;
+  /**
+   * Concatenated searchable text. cmdk re-filters items by their `value`
+   * (defaulting to visible text), so without this a session matched only by
+   * its prompt — not its title — would be hidden. Including the id keeps
+   * values unique across items with identical titles.
+   */
+  value: string;
 }
 
 export interface SearchPaletteProps {
@@ -55,6 +62,7 @@ export function SearchPalette({
         id: s.id,
         title: s.title || "Untitled Session",
         status: s.status,
+        value: `${s.title ?? ""} ${s.prompt ?? ""} ${s.id}`,
       }));
 
     // Project-scoped sessions (flattened with projectId tag)
@@ -71,6 +79,7 @@ export function SearchPalette({
           title: s.title || "Untitled Session",
           status: s.status,
           projectId: p.id,
+          value: `${s.title ?? ""} ${s.prompt ?? ""} ${s.id}`,
         })),
     );
 
@@ -84,6 +93,7 @@ export function SearchPalette({
       id: p.id,
       title: p.name,
       subtitle: p.description,
+      value: `${p.name} ${p.description ?? ""} ${p.id}`,
     }));
 
     return [...standaloneResults, ...projectSessionResults, ...projectResults];
@@ -118,6 +128,7 @@ export function SearchPalette({
             {sessionResults.map((r) => (
               <CommandItem
                 key={r.id}
+                value={r.value}
                 onSelect={() => handleSelect(r)}
                 className="flex items-center justify-between"
               >
@@ -131,7 +142,7 @@ export function SearchPalette({
         {projectSearchResults.length > 0 && (
           <CommandGroup heading="Projects">
             {projectSearchResults.map((r) => (
-              <CommandItem key={r.id} onSelect={() => handleSelect(r)}>
+              <CommandItem key={r.id} value={r.value} onSelect={() => handleSelect(r)}>
                 <div>
                   <div>{r.title}</div>
                   {r.subtitle && (

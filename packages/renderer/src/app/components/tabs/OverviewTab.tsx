@@ -2,6 +2,7 @@ import { Sparkles, Terminal, FileText, ArrowRight, Plus, ChevronRight, BookOpen,
 import { Project, ActivityItem, Note, Reference } from "../../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo, sessionWeight } from "../SessionStateBadge";
 import { ReferenceRow } from "./ReferencesTab";
+import { formatRelativeTime } from "../../../lib/format/time.js";
 
 interface Props {
   project: Project;
@@ -86,7 +87,7 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
                       </div>
                     </div>
                     <span className="mt-1 font-mono text-[10.5px] text-muted-foreground">
-                      {s.status === "running" ? <SessionStateIndicator status="running" size={12} /> : s.startedAt}
+                      {s.status === "running" ? <SessionStateIndicator status="running" size={12} /> : formatRelativeTime(s.createdAtMs)}
                     </span>
                     <ChevronRight className="mt-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </button>
@@ -124,7 +125,7 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
                 >
                   <div className="flex items-center gap-2">
                     <span className="truncate text-[13px] text-foreground">{n.title}</span>
-                    <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">{n.updatedAt}</span>
+                    <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(n.updatedAt)}</span>
                   </div>
                   <p className="line-clamp-2 text-[12px] text-muted-foreground">{n.body}</p>
                 </button>
@@ -229,7 +230,7 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
               <li key={a.id} className="group flex items-center gap-3 border-b border-border/60 px-5 py-2.5 last:border-b-0 hover:bg-secondary/40">
                 <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="flex-1 text-[13px] text-foreground">{a.text}</span>
-                <span className="font-mono text-[10.5px] text-muted-foreground">{a.ts}</span>
+                <span className="font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(a.ts)}</span>
               </li>
             );
           })}
