@@ -70,6 +70,10 @@ interface DataMutationValue {
   /** Open a draft PR per touched repo with changes; returns the count opened. */
   openSessionPR(sessionId: string): Promise<{ opened: number; message?: string }>;
 
+  // M5.3 — project intelligence
+  /** (Re)synthesize a project's summary + next steps via the intelligence layer. */
+  resynthesizeProject(projectId: string): Promise<void>;
+
   // M-A5 — Session runtime (live agent harness)
   /** Start a new session with the active harness. Returns the session ID. */
   startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }>;
@@ -420,6 +424,19 @@ export function DataProvider({
         toast.success("Asked the agent to address the comments");
       } catch (err) {
         toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      }
+    },
+
+    /** M5.3 — (re)synthesize a project's summary + next steps. */
+    async resynthesizeProject(projectId: string): Promise<void> {
+      const id = toast.loading("Synthesizing project summary…");
+      try {
+        const result = await call("project:resynthesize", { projectId });
+        await loadData();
+        toast.success(result ? "Summary updated" : "Nothing to synthesize", { id });
+      } catch (err) {
+        toast.error(`Synthesis failed: ${err instanceof Error ? err.message : String(err)}`, { id });
         throw err;
       }
     },

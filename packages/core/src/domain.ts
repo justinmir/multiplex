@@ -147,6 +147,8 @@ export interface Project {
   activity: ActivityItem[];
   summary: string;
   nextSteps: string[];
+  /** Epoch ms when summary/nextSteps were last LLM-synthesized (M5.3). */
+  summarySynthesizedAtMs?: number;
 }
 
 export type SessionWindow = "last_24h" | "last_7d" | "last_30d" | "older" | "archived";

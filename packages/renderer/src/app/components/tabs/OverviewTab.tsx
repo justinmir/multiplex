@@ -10,12 +10,18 @@ interface Props {
   onOpenSession: (id: string | "new") => void;
   onOpenNote: (id: string) => void;
   onOpenTab: (t: "sessions" | "notes" | "references") => void;
+  /** M5.3 — (re)synthesize the project summary + next steps. */
+  onResynthesize?: () => void;
+  resynthesizing?: boolean;
 }
 
 const iconFor = (k: ActivityItem["kind"]) =>
   k === "pr" ? GitPullRequest : k === "session" ? Terminal : k === "note" ? FileText : k === "ref" ? BookOpen : Sparkles;
 
-export function OverviewTab({ project, references, onOpenSession, onOpenNote, onOpenTab }: Props) {
+export function OverviewTab({ project, references, onOpenSession, onOpenNote, onOpenTab, onResynthesize, resynthesizing }: Props) {
+  const synthStamp = project.summarySynthesizedAtMs
+    ? `synthesized ${formatRelativeTime(project.summarySynthesizedAtMs)}`
+    : "not synthesized yet";
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       {/* AI summary */}
@@ -23,10 +29,23 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-            Agent summary · synthesized 14m ago
+            Agent summary · {synthStamp}
           </span>
+          {onResynthesize && (
+            <button
+              onClick={onResynthesize}
+              disabled={resynthesizing}
+              className="ml-auto rounded-md border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
+            >
+              {resynthesizing ? "Synthesizing…" : "Re-synthesize"}
+            </button>
+          )}
         </div>
-        <p className="font-display text-[22px] leading-[1.35] text-foreground">{project.summary}</p>
+        {project.summary ? (
+          <p className="font-display text-[22px] leading-[1.35] text-foreground">{project.summary}</p>
+        ) : (
+          <p className="font-display text-[22px] leading-[1.35] text-muted-foreground/60">No summary yet — click Re-synthesize to generate one.</p>
+        )}
 
         <div className="mt-5 border-t border-border pt-4">
           <div className="mb-2.5 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">

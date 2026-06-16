@@ -2,6 +2,7 @@ import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { JsonRepository } from "../../repo/JsonRepository.js";
 import type { ActivityItem } from "@app/core";
+import { getIntelligenceService } from "../../intelligence/service.js";
 
 /** Generate a unique activity item ID. */
 function activityId(): string {
@@ -23,6 +24,7 @@ export function registerRepoWriteHandlers(repo: JsonRepository) {
     await repo.appendActivity(req.projectId, activity);
 
     emit("data:changed", { kind: "note", projectId: req.projectId });
+    getIntelligenceService()?.notifyActivity(req.projectId);
     return note;
   });
 
@@ -52,9 +54,12 @@ export function registerRepoWriteHandlers(repo: JsonRepository) {
         ts: new Date().toISOString(),
       };
       await repo.appendActivity(req.scope.projectId, activity);
+      getIntelligenceService()?.notifyActivity(req.scope.projectId);
     }
 
     emit("data:changed", { kind: "reference" });
+    // M5.5 — derive a one-line summary for the new reference (fire-and-forget).
+    void getIntelligenceService()?.ingestReference(req.scope, ref);
     return ref;
   });
 

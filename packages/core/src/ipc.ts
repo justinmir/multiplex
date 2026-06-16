@@ -80,6 +80,9 @@ export interface IpcContract {
 
   // M-B5 — Open draft PRs for every touched repo with changes
   "session:open-pr": { req: { sessionId: string }; res: { opened: PullRequest[]; message?: string } };
+
+  // M5.3 — Project intelligence: (re)synthesize summary + next steps
+  "project:resynthesize": { req: { projectId: string }; res: { summary: string; nextSteps: string[]; synthesizedAtMs: number } | null };
 }
 
 export interface AppSettingsData {

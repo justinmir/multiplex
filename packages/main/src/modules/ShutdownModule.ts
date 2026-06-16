@@ -1,6 +1,7 @@
 import type { AppModule } from "../AppModule.js";
 import type { ModuleContext } from "../ModuleContext.js";
 import { getSessionRuntime } from "../session/runtime.js";
+import { getIntelligenceService } from "../intelligence/service.js";
 
 /** Gracefully shut down all active sessions before app quit. */
 export function createShutdownModule(): AppModule {
@@ -8,6 +9,7 @@ export function createShutdownModule(): AppModule {
     async enable({ app }: ModuleContext) {
       // Intercept before-quit to gracefully stop all sessions
       app.on("before-quit", async () => {
+        try { getIntelligenceService()?.stop(); } catch { /* ignore */ }
         const runtime = getSessionRuntime();
         if (runtime) {
           try {
