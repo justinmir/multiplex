@@ -1,9 +1,10 @@
-import type { Repository, Session, SessionMsg, AppSettingsData, HarnessConfig } from "@app/core";
+import type { Repository, Session, SessionMsg, Workspace, AppSettingsData, HarnessConfig, HostTool } from "@app/core";
 import type { Harness, HarnessEvent, HarnessRun } from "@app/core";
 import { createHarness } from "@app/core";
 import { registerBuiltInHarnesses } from "../harness/index.js";
 import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
+import type { WorkspaceManager } from "./WorkspaceManager.js";
 
 /** Configuration for session concurrency limits. */
 export interface ConcurrencyConfig {
@@ -41,21 +42,38 @@ export class SessionRuntime {
    *  concurrently-arriving harness events can't clobber each other's writes. */
   private persistChains = new Map<string, Promise<void>>();
 
+  private workspaces?: WorkspaceManager;
+
   constructor(
     repo: Repository,
     getSettings: () => AppSettingsData,
     emit: (topic: string, payload: unknown) => void,
+    workspaceManager?: WorkspaceManager,
     config?: Partial<ConcurrencyConfig>,
   ) {
     this.repo = repo;
     this.settingsFn = getSettings;
     this.emitFn = emit;
+    this.workspaces = workspaceManager;
     this.concurrencyConfig = { ...DEFAULT_CONCURRENCY, ...config };
 
     // Ensure built-in harnesses are registered
     registerBuiltInHarnesses();
     // Start crash detection loop
     this.startCrashDetection();
+  }
+
+  /** Expose the workspace manager for IPC handlers (e.g. session:changes). */
+  getWorkspaceManager(): WorkspaceManager | undefined {
+    return this.workspaces;
+  }
+
+  /** Real diffs across the session's materialized worktrees, grouped by repo. */
+  async getSessionChanges(sessionId: string): Promise<Array<{ repo: string; files: import("@app/core").FileChange[] }>> {
+    if (!this.workspaces) return [];
+    const session = await this.repo.getSession(sessionId);
+    if (!session) return [];
+    return this.workspaces.diffAll(session.workspaces);
   }
 
   /** Check how many sessions can still be started. */
@@ -113,9 +131,9 @@ export class SessionRuntime {
     await this.repo.upsertSession(newSession, input.projectId ?? null);
     this.emitFn("data:changed", { kind: "session" });
 
-    const cwd = input.cwd ?? process.env.HOME ?? "/tmp";
     try {
-      await this.beginRun(harness, { sessionId, prompt: input.prompt, model, cwd });
+      const ctx = await this.prepareWorkspace(sessionId, input.projectId ?? null, harness);
+      await this.beginRun(harness, { sessionId, prompt: input.prompt, model, ...ctx });
     } catch (err) {
       // Harness failed to start — mark session as failed
       const existing = await this.repo.getSession(sessionId);
@@ -129,13 +147,77 @@ export class SessionRuntime {
     return { sessionId };
   }
 
+  /**
+   * Prepare a session's workspace: ensure the root dir, build the repo catalog
+   * and the `open_repo` host tool, and (for harnesses that can't declare repos
+   * lazily) pre-materialize the session's in-scope repos.
+   */
+  private async prepareWorkspace(
+    sessionId: string,
+    projectId: string | null,
+    harness: Harness,
+  ): Promise<{ cwd: string; availableRepos: string[]; tools: HostTool[] }> {
+    const wm = this.workspaces;
+    if (!wm) {
+      return { cwd: process.env.HOME ?? "/tmp", availableRepos: [], tools: [] };
+    }
+
+    const cwd = wm.ensureRoot(sessionId);
+    const registered = wm.catalog();
+    const inScope = projectId ? ((await this.repo.getProject(projectId))?.repos ?? []) : [];
+    const availableRepos = Array.from(new Set([...inScope, ...registered]));
+
+    const openRepo: HostTool = {
+      name: "open_repo",
+      description:
+        "Create a git worktree for a repository so you can read and edit its files. " +
+        "Call this once before working in a repo; it returns the absolute path to work in. " +
+        "Argument: { repo: string } where repo is one of the available repo identifiers.",
+      inputSchema: { type: "object", properties: { repo: { type: "string" } }, required: ["repo"] },
+      handler: async (raw) => {
+        const repoId = (raw as { repo?: string } | undefined)?.repo;
+        if (!repoId) return { content: "open_repo requires a 'repo' argument", isError: true };
+        return this.materializeRepo(sessionId, repoId);
+      },
+    };
+
+    // Harnesses without host-tool support get their in-scope repos up front.
+    if (!harness.supportsHostTools) {
+      for (const repoId of inScope) {
+        if (wm.resolves(repoId)) await this.materializeRepo(sessionId, repoId);
+      }
+    }
+
+    return { cwd, availableRepos, tools: [openRepo] };
+  }
+
+  /** Materialize a worktree for `repoId` and record it on the session. */
+  private async materializeRepo(sessionId: string, repoId: string): Promise<{ content: string; isError?: boolean }> {
+    const wm = this.workspaces;
+    if (!wm) return { content: "Workspaces unavailable", isError: true };
+    const existing = (await this.repo.getSession(sessionId))?.workspaces ?? [];
+    const { workspace, error } = await wm.openRepo(sessionId, repoId, existing);
+    if (error || !workspace) return { content: error ?? `Failed to open ${repoId}`, isError: true };
+    // Persist + forward through the normal event path (dedupes by repo+branch).
+    this.onHarnessEvent(sessionId, { type: "workspace", workspace });
+    return { content: workspace.worktree ?? "" };
+  }
+
   /** Start a harness run for a session id and register it. */
   private async beginRun(
     harness: Harness,
-    input: { sessionId: string; prompt: string; model?: string; cwd: string },
+    input: { sessionId: string; prompt: string; model?: string; cwd: string; availableRepos?: string[]; tools?: HostTool[] },
   ): Promise<void> {
     const run = await harness.start(
-      { sessionId: input.sessionId, prompt: input.prompt, model: input.model, cwd: input.cwd, workspaces: [] },
+      {
+        sessionId: input.sessionId,
+        prompt: input.prompt,
+        model: input.model,
+        cwd: input.cwd,
+        workspaces: [],
+        availableRepos: input.availableRepos,
+        tools: input.tools,
+      },
       (event) => this.onHarnessEvent(input.sessionId, event),
     );
     this.runs.set(input.sessionId, run);
@@ -166,13 +248,14 @@ export class SessionRuntime {
       return;
     }
 
-    // No live run — revive one. The new run uses this message as its prompt.
+    // No live run — revive one. The new run uses this message as its prompt and
+    // re-attaches the session's workspace (worktrees are reused if they exist).
     const settings = this.settingsFn();
     const harness = getHarness(settings);
     if (!harness) throw new Error(`No harness registered for id "${settings.harnessId ?? "mock"}"`);
     const model = existing.model || settings.defaultModel;
-    const cwd = process.env.HOME ?? "/tmp";
-    await this.beginRun(harness, { sessionId, prompt: text, model, cwd });
+    const ctx = await this.prepareWorkspace(sessionId, projectId, harness);
+    await this.beginRun(harness, { sessionId, prompt: text, model, ...ctx });
   }
 
   /** Stop the agent for a session. */

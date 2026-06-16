@@ -2,12 +2,30 @@ import type { SessionMsg, Workspace } from "../domain.js";
 
 export type HarnessId = string; // "mock" | "opencode" | "claude" | "codex"
 
+/**
+ * A tool the agent can invoke whose execution is handled in main (the host),
+ * not by the model. The result is returned to the agent AND surfaced as a
+ * tool_use/tool_result pair in the transcript. Used by Workstream C's
+ * `open_repo` to lazily materialize a per-repo worktree on first touch.
+ */
+export interface HostTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  handler: (input: unknown) => Promise<{ content: string; isError?: boolean }>;
+}
+
 export interface HarnessRunInput {
   sessionId: string;
   prompt: string;
   model?: string;
+  /** The SESSION WORKSPACE ROOT (not a worktree). Per-repo worktrees live under it. */
   cwd: string;
   workspaces: Workspace[];
+  /** Repo identifiers the agent may declare (the registered catalog). */
+  availableRepos?: string[];
+  /** Host-executed tools surfaced to the agent. */
+  tools?: HostTool[];
   references?: { title: string; url?: string; body?: string }[];
   notes?: { title: string; body: string }[];
 }
@@ -42,6 +60,12 @@ export interface HarnessRun {
 
 export interface Harness {
   readonly id: HarnessId;
+  /**
+   * Whether this harness surfaces host tools to the agent so it can declare
+   * repos lazily via `open_repo`. When false, the runtime pre-materializes the
+   * session's in-scope repos up front instead.
+   */
+  readonly supportsHostTools?: boolean;
   start(input: HarnessRunInput, onEvent: (e: HarnessEvent) => void): Promise<HarnessRun>;
   health(): Promise<{ ok: boolean; version?: string; detail?: string }>;
   listModels(): Promise<{ id: string; label?: string; provider?: string }[]>;

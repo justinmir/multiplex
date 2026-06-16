@@ -32,6 +32,11 @@ function parseModel(model?: string): { providerID: string; modelID: string } | u
  */
 export class OpencodeHarness implements Harness {
   readonly id = "opencode";
+  // opencode's custom/host-tool registration isn't wired yet, so the runtime
+  // pre-materializes the session's in-scope repos as worktrees under cwd and
+  // opencode works in them directly. (Lazy host-tool declaration is implemented
+  // and exercised by MockHarness; opencode can adopt it once spiked.)
+  readonly supportsHostTools = false;
   private binPath: string;
   private serverManager: OpenCodeServerManager | null = null;
 

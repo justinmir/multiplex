@@ -13,6 +13,11 @@ import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js"
 import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 import { registerRepoHandlers } from "../ipc/handlers/repos.js";
+import { registerChangesHandlers } from "../ipc/handlers/changes.js";
+import { WorkspaceManager } from "../session/WorkspaceManager.js";
+import { gitService } from "../git/LocalGitService.js";
+import { repoRegistry } from "../git/RepoRegistry.js";
+import { sessionsDir } from "../repo/paths.js";
 import { SessionRuntime } from "../session/SessionRuntime.js";
 import { setSessionRuntime } from "../session/runtime.js";
 import { registerSessionRuntimeHandlers } from "../ipc/handlers/session.js";
@@ -53,13 +58,18 @@ export function createIpcModule(): AppModule {
       // M-A4: Register built-in harnesses and create the session runtime
       registerBuiltInHarnesses();
       const settings = getAppSettings();
+      const workspaceManager = new WorkspaceManager(gitService, repoRegistry, sessionsDir());
       const runtime = new SessionRuntime(
         repo,
         () => settings.get(),
         emit,
+        workspaceManager,
       );
       setSessionRuntime(runtime);
       registerSessionRuntimeHandlers(runtime);
+
+      // M-C4: Real diffs across a session's materialized worktrees
+      registerChangesHandlers(runtime);
 
       // M-A7: Recover sessions left in "running" state from a previous crash
       (async () => {
