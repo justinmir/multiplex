@@ -9,15 +9,16 @@ export class OpenCodeServerManager extends EventEmitter {
   private port: number | null = null;
   private started = false;
 
-  /** Start the opencode serve server on a random port. */
-  async start(opencodePath: string): Promise<number> {
+  /** Start the opencode serve server on a random port, rooted at `cwd` so it
+   *  loads that directory's `opencode.json` (e.g. our per-session MCP config). */
+  async start(opencodePath: string, cwd?: string): Promise<number> {
     if (this.started) return this.port!;
 
     const stdio: StdioOptions = ["pipe", "pipe", "pipe"];
     this.child = spawn(
       opencodePath,
       ["serve", "--port", "0", "--hostname", "127.0.0.1"],
-      { stdio },
+      { stdio, cwd },
     );
 
     const portPromise = new Promise<number>((resolve, reject) => {

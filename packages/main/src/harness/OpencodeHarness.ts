@@ -1,8 +1,11 @@
 import { execFileSync } from "child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import os from "os";
 import path from "path";
 import type { Harness, HarnessConfig, HarnessEvent, HarnessFactory, HarnessRun, HarnessRunInput } from "@app/core";
 import { OpenCodeServerManager } from "./server.js";
+import { hostToolBridge } from "./HostToolBridge.js";
 
 const OPENCODE_PATH = process.env.OPENCODE_BIN ?? path.join(os.homedir(), ".opencode", "bin", "opencode");
 
@@ -32,11 +35,9 @@ function parseModel(model?: string): { providerID: string; modelID: string } | u
  */
 export class OpencodeHarness implements Harness {
   readonly id = "opencode";
-  // opencode's custom/host-tool registration isn't wired yet, so the runtime
-  // pre-materializes the session's in-scope repos as worktrees under cwd and
-  // opencode works in them directly. (Lazy host-tool declaration is implemented
-  // and exercised by MockHarness; opencode can adopt it once spiked.)
-  readonly supportsHostTools = false;
+  // The agent declares repos lazily via the `open_repo` host tool, bridged to
+  // opencode as a remote MCP server (HostToolBridge). Verified against 1.17.6.
+  readonly supportsHostTools = true;
   private binPath: string;
   private serverManager: OpenCodeServerManager | null = null;
 
@@ -47,11 +48,29 @@ export class OpencodeHarness implements Harness {
   }
 
   async start(input: HarnessRunInput, onEvent: (event: HarnessEvent) => void): Promise<HarnessRun> {
+    const model = parseModel(input.model);
+    const hostTools = input.tools ?? [];
+
+    // Expose host tools (open_repo) to the agent via an in-process MCP server,
+    // configured for this session through the workspace-root opencode.json.
+    if (hostTools.length > 0) {
+      await hostToolBridge.start();
+      hostToolBridge.register(input.sessionId, hostTools);
+      writeFileSync(
+        join(input.cwd, "opencode.json"),
+        JSON.stringify(
+          { "$schema": "https://opencode.ai/config.json", mcp: { multiplex: { type: "remote", url: hostToolBridge.urlFor(input.sessionId) } } },
+          null,
+          2,
+        ),
+      );
+    }
+
     const serverManager = new OpenCodeServerManager();
-    await serverManager.start(this.binPath);
+    // Root the server at the workspace dir so it loads our opencode.json (MCP).
+    await serverManager.start(this.binPath, input.cwd);
     this.serverManager = serverManager;
     const baseUrl = serverManager.getUrl()!;
-    const model = parseModel(input.model);
 
     onEvent({ type: "status", status: "starting" });
 
@@ -78,6 +97,7 @@ export class OpencodeHarness implements Harness {
       if (terminated) return;
       terminated = true;
       abort.abort();
+      hostToolBridge.unregister(input.sessionId);
       void serverManager.stop();
     };
 
@@ -127,8 +147,14 @@ export class OpencodeHarness implements Harness {
       if (!abort.signal.aborted) fail(err instanceof Error ? err.message : String(err));
     });
 
+    // Tell the agent how to obtain a working directory for a repo. opencode may
+    // surface the MCP tool namespaced (e.g. `multiplex_open_repo`).
+    const system = hostTools.length > 0 && (input.availableRepos?.length ?? 0) > 0
+      ? `You are working in a fresh session workspace that starts empty. To read or edit files in a repository, FIRST call the open_repo tool (it may appear as multiplex_open_repo) with { "repo": "<id>" }; it returns the absolute path to that repo's working tree. Only open repositories you actually need. Available repositories: ${input.availableRepos!.join(", ")}.`
+      : undefined;
+
     // Send the initial prompt (async — the SSE stream carries the response).
-    const promptResp = await this.sendPrompt(baseUrl, sessionId, input.prompt, model);
+    const promptResp = await this.sendPrompt(baseUrl, sessionId, input.prompt, model, system);
     if (!promptResp.ok) {
       const detail = await promptResp.text();
       teardown();
@@ -155,6 +181,7 @@ export class OpencodeHarness implements Harness {
         if (terminated) return;
         terminated = true;
         abort.abort();
+        hostToolBridge.unregister(input.sessionId);
         serverManager.killNow();
       },
     };
@@ -165,12 +192,14 @@ export class OpencodeHarness implements Harness {
     sessionId: string,
     text: string,
     model?: { providerID: string; modelID: string },
+    system?: string,
   ): Promise<Response> {
     return fetch(`${baseUrl}/session/${sessionId}/prompt_async`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...(model ? { model } : {}),
+        ...(system ? { system } : {}),
         parts: [{ type: "text", text }],
       }),
     });
