@@ -6,6 +6,8 @@ import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
 import type { WorkspaceManager } from "./WorkspaceManager.js";
 import { pushBranch } from "../git/push.js";
+import { assembleProjectContext } from "../intelligence/assembleContext.js";
+import { getIntelligenceService } from "../intelligence/service.js";
 
 /** Configuration for session concurrency limits. */
 export interface ConcurrencyConfig {
@@ -228,7 +230,7 @@ export class SessionRuntime {
     sessionId: string,
     projectId: string | null,
     harness: Harness,
-  ): Promise<{ cwd: string; availableRepos: string[]; tools: HostTool[] }> {
+  ): Promise<{ cwd: string; availableRepos: string[]; tools: HostTool[]; notes?: { title: string; body: string }[]; references?: { title: string; url?: string; body?: string }[] }> {
     const wm = this.workspaces;
     if (!wm) {
       return { cwd: process.env.HOME ?? "/tmp", availableRepos: [], tools: [] };
@@ -236,7 +238,11 @@ export class SessionRuntime {
 
     const cwd = wm.ensureRoot(sessionId);
     const registered = wm.catalog();
-    const inScope = projectId ? ((await this.repo.getProject(projectId))?.repos ?? []) : [];
+    // M-D2 — a project session inherits its project's notes + references so the
+    // agent has the same context the intelligence layer uses.
+    const project = projectId ? await this.repo.getProject(projectId) : null;
+    const inScope = project?.repos ?? [];
+    const ctx = project ? assembleProjectContext(project) : undefined;
     const availableRepos = Array.from(new Set([...inScope, ...registered]));
 
     const openRepo: HostTool = {
@@ -260,7 +266,7 @@ export class SessionRuntime {
       }
     }
 
-    return { cwd, availableRepos, tools: [openRepo] };
+    return { cwd, availableRepos, tools: [openRepo], notes: ctx?.notes, references: ctx?.references };
   }
 
   /** Materialize a worktree for `repoId` and record it on the session. */
@@ -278,7 +284,7 @@ export class SessionRuntime {
   /** Start a harness run for a session id and register it. */
   private async beginRun(
     harness: Harness,
-    input: { sessionId: string; prompt: string; model?: string; cwd: string; availableRepos?: string[]; tools?: HostTool[] },
+    input: { sessionId: string; prompt: string; model?: string; cwd: string; availableRepos?: string[]; tools?: HostTool[]; notes?: { title: string; body: string }[]; references?: { title: string; url?: string; body?: string }[] },
   ): Promise<void> {
     const run = await harness.start(
       {
@@ -289,6 +295,8 @@ export class SessionRuntime {
         workspaces: [],
         availableRepos: input.availableRepos,
         tools: input.tools,
+        notes: input.notes,
+        references: input.references,
       },
       (event) => this.onHarnessEvent(input.sessionId, event),
     );
@@ -584,5 +592,10 @@ export class SessionRuntime {
     await this.repo.upsertSession(updated, projectId);
     this.emitFn(`session:${sessionId}:status`, { sessionId, status: updated.status });
     this.emitFn("data:changed", { kind: "session" });
+
+    // M5.4 — a completed turn is meaningful project activity; nudge synthesis.
+    if (event.type === "done" && event.reason === "completed" && projectId) {
+      getIntelligenceService()?.notifyActivity(projectId);
+    }
   }
 }

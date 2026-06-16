@@ -14,6 +14,10 @@ import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
 import { registerRepoHandlers } from "../ipc/handlers/repos.js";
 import { registerSearchHandlers } from "../ipc/handlers/search.js";
+import { registerIntelligenceHandlers } from "../ipc/handlers/intelligence.js";
+import { OpencodeIntelligence } from "../intelligence/OpencodeIntelligence.js";
+import { IntelligenceService } from "../intelligence/IntelligenceService.js";
+import { setIntelligenceService } from "../intelligence/service.js";
 import { registerChangesHandlers } from "../ipc/handlers/changes.js";
 import { registerPrHandlers } from "../ipc/handlers/pr.js";
 import { WorkspaceManager } from "../session/WorkspaceManager.js";
@@ -101,6 +105,17 @@ export function createIpcModule(): AppModule {
 
       // M6.3: Global search over real projects, sessions, and PRs
       registerSearchHandlers(repo);
+
+      // M5 (Phase 5): Project intelligence via opencode
+      const intelligence = new IntelligenceService(
+        repo,
+        new OpencodeIntelligence(() => settings.get().defaultModel),
+        () => settings.get(),
+        emit,
+      );
+      setIntelligenceService(intelligence);
+      registerIntelligenceHandlers(intelligence);
+      intelligence.startDaily();
     },
   };
 }

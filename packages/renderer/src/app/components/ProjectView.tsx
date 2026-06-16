@@ -30,12 +30,18 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
   const [tab, setTab] = useState<TabId>(initialSessionId ? "sessions" : "overview");
   const [sessionOpen, setSessionOpen] = useState<string | "new" | null>(initialSessionId ?? null);
   const [noteFocus, setNoteFocus] = useState<string | null>(null);
+  const [resynthesizing, setResynthesizing] = useState(false);
 
   useEffect(() => {
     setTab(initialSessionId ? "sessions" : "overview");
     setSessionOpen(initialSessionId ?? null);
     setNoteFocus(null);
   }, [project.id, initialSessionId]);
+
+  const handleResynthesize = () => {
+    setResynthesizing(true);
+    mutations.resynthesizeProject(project.id).finally(() => setResynthesizing(false));
+  };
 
   const openSession = (id: string | "new") => {
     setSessionOpen(id);
@@ -114,6 +120,8 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
               onOpenNote={openNote}
               onOpenTab={(t) => setTab(t)}
               references={project.references}
+              onResynthesize={handleResynthesize}
+              resynthesizing={resynthesizing}
             />
           </div>
         )}
