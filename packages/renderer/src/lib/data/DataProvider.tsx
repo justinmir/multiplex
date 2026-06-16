@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { toast } from "sonner";
 import type { Note, Project, Reference, RefScope, Session, SessionStatus } from "@app/core";
 import { call, on } from "../ipc/client.js";
+import { useReconnect } from "../ipc/reconnect.js";
 import type { DataSource } from "./types.js";
 
 interface DataContextValue {
@@ -124,6 +125,10 @@ export function DataProvider({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // M7.1 — self-heal: refetch authoritative state on focus/online so missed
+  // push events (window backgrounded, machine asleep) don't leave stale data.
+  useReconnect(loadData);
 
   // Load GitHub connection status on mount
   useEffect(() => {

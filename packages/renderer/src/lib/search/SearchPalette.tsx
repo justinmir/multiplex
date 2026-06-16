@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Project, Session, SessionStatus } from "@app/core";
 import {
   CommandDialog,
@@ -9,28 +9,23 @@ import {
   CommandItem,
 } from "../../app/components/ui/command";
 import { SessionStateLabel } from "../../app/components/SessionStateBadge";
+import { call } from "../ipc/client.js";
 
 interface SearchResult {
-  kind: "session" | "project";
+  kind: "session" | "project" | "pr";
   id: string;
   title: string;
   subtitle?: string;
   status?: SessionStatus;
   projectId?: string;
-  /**
-   * Concatenated searchable text. cmdk re-filters items by their `value`
-   * (defaulting to visible text), so without this a session matched only by
-   * its prompt — not its title — would be hidden. Including the id keeps
-   * values unique across items with identical titles.
-   */
-  value: string;
 }
 
 export interface SearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projects: Project[];
-  standaloneSessions: Session[];
+  // Kept for API compatibility; search is now server-side via search:query.
+  projects?: Project[];
+  standaloneSessions?: Session[];
   onSelectProject: (id: string, sessionId?: string | null) => void;
   onSelectSession: (sessionId: string, projectId?: string) => void;
 }
@@ -38,100 +33,59 @@ export interface SearchPaletteProps {
 export function SearchPalette({
   open,
   onOpenChange,
-  projects,
-  standaloneSessions,
   onSelectProject,
   onSelectSession,
 }: SearchPaletteProps) {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
 
-  // Flatten all searchable entities from loaded data
-  const results = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase().trim();
-
-    // Standalone sessions
-    const standaloneResults: SearchResult[] = standaloneSessions
-      .filter(
-        (s) =>
-          (s.title ?? "").toLowerCase().includes(q) ||
-          (s.prompt ?? "").toLowerCase().includes(q),
-      )
-      .map((s) => ({
-        kind: "session" as const,
-        id: s.id,
-        title: s.title || "Untitled Session",
-        status: s.status,
-        value: `${s.title ?? ""} ${s.prompt ?? ""} ${s.id}`,
-      }));
-
-    // Project-scoped sessions (flattened with projectId tag)
-    const projectSessionResults: SearchResult[] = projects.flatMap((p) =>
-      p.sessions
-        .filter(
-          (s) =>
-            (s.title ?? "").toLowerCase().includes(q) ||
-            (s.prompt ?? "").toLowerCase().includes(q),
-        )
-        .map((s) => ({
-          kind: "session" as const,
-          id: s.id,
-          title: s.title || "Untitled Session",
-          status: s.status,
-          projectId: p.id,
-          value: `${s.title ?? ""} ${s.prompt ?? ""} ${s.id}`,
-        })),
-    );
-
-    // Projects
-    const projectResults: SearchResult[] = projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q),
-    ).map((p) => ({
-      kind: "project" as const,
-      id: p.id,
-      title: p.name,
-      subtitle: p.description,
-      value: `${p.name} ${p.description ?? ""} ${p.id}`,
-    }));
-
-    return [...standaloneResults, ...projectSessionResults, ...projectResults];
-  }, [query, projects, standaloneSessions]);
+  // Debounced server-side search over real projects, sessions, and PRs.
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      call("search:query", { q })
+        .then((res) => { if (!cancelled) setResults(res as SearchResult[]); })
+        .catch(() => { if (!cancelled) setResults([]); });
+    }, 180);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query]);
 
   const handleSelect = (item: SearchResult) => {
     onOpenChange(false);
-    setQuery(""); // clear query for next time
-
+    setQuery("");
     if (item.kind === "session") {
       onSelectSession(item.id, item.projectId);
-    } else if (item.kind === "project") {
-      onSelectProject(item.id, null);
+    } else {
+      // project + pr both navigate to the owning project.
+      onSelectProject(item.projectId ?? item.id, null);
     }
   };
 
   const sessionResults = results.filter((r) => r.kind === "session");
-  const projectSearchResults = results.filter((r) => r.kind === "project");
+  const projectResults = results.filter((r) => r.kind === "project");
+  const prResults = results.filter((r) => r.kind === "pr");
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <CommandDialog open={open} onOpenChange={onOpenChange} shouldFilter={false}>
+      {/* Server already filtered; disable cmdk's re-filtering so prompt-only
+          matches aren't hidden by the visible-text heuristic. */}
       <CommandInput
         value={query}
-        onValueChange={(value) => setQuery(value)}
-        placeholder="Search projects, sessions..."
+        onValueChange={setQuery}
+        placeholder="Search projects, sessions, PRs…"
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>{query.trim() ? "No results found." : "Type to search."}</CommandEmpty>
 
         {sessionResults.length > 0 && (
           <CommandGroup heading="Sessions">
             {sessionResults.map((r) => (
-              <CommandItem
-                key={r.id}
-                value={r.value}
-                onSelect={() => handleSelect(r)}
-                className="flex items-center justify-between"
-              >
+              <CommandItem key={`s:${r.id}`} value={`s:${r.id}`} onSelect={() => handleSelect(r)} className="flex items-center justify-between">
                 <span>{r.title}</span>
                 {r.status && <SessionStateLabel status={r.status} />}
               </CommandItem>
@@ -139,15 +93,26 @@ export function SearchPalette({
           </CommandGroup>
         )}
 
-        {projectSearchResults.length > 0 && (
+        {projectResults.length > 0 && (
           <CommandGroup heading="Projects">
-            {projectSearchResults.map((r) => (
-              <CommandItem key={r.id} value={r.value} onSelect={() => handleSelect(r)}>
+            {projectResults.map((r) => (
+              <CommandItem key={`p:${r.id}`} value={`p:${r.id}`} onSelect={() => handleSelect(r)}>
                 <div>
                   <div>{r.title}</div>
-                  {r.subtitle && (
-                    <div className="text-sm text-muted-foreground">{r.subtitle}</div>
-                  )}
+                  {r.subtitle && <div className="text-sm text-muted-foreground">{r.subtitle}</div>}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {prResults.length > 0 && (
+          <CommandGroup heading="Pull requests">
+            {prResults.map((r) => (
+              <CommandItem key={`pr:${r.id}`} value={`pr:${r.id}`} onSelect={() => handleSelect(r)}>
+                <div>
+                  <div>{r.title}</div>
+                  {r.subtitle && <div className="text-sm text-muted-foreground">{r.subtitle}</div>}
                 </div>
               </CommandItem>
             ))}

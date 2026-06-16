@@ -55,8 +55,8 @@ export interface IpcContract {
   "prs:merge": { req: { owner: string; repo: string; prNumber: number }; res: { success: boolean } };
   "app:open-url": { req: { url: string }; res: void };
 
-  // M6.3 — Global search (future-proofing for server-side search)
-  "search:query": { req: { q: string }; res: Array<{ kind: "project" | "session" | "pr"; id: string; title: string; subtitle?: string }> };
+  // M6.3 — Global search over real projects, sessions, and PRs
+  "search:query": { req: { q: string }; res: Array<{ kind: "project" | "session" | "pr"; id: string; title: string; subtitle?: string; projectId?: string; status?: SessionStatus }> };
 
   // M6.4 — Settings surface (consolidate)
   "settings:get": { req: void; res: AppSettingsData };

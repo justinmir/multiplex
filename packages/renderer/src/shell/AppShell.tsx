@@ -256,6 +256,7 @@ export function AppShell() {
         isStandaloneSessionUnread={(sid) => unread.has(standaloneKey(sid))}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenCreateProject={() => setCreateProjectOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
       />
       <main className="flex h-full min-w-0 flex-1">
         {view === "home" && (

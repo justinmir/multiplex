@@ -43,7 +43,13 @@ class MockHarnessRun implements HarnessRun {
 
   async send(_message: string): Promise<void> {
     if (this.stopped) return;
-    await schedule(this, "🔁 Reply received. Continuing the task…\nI've updated the relevant files and verified the changes.");
+    const reply = "🔁 Reply received. Continuing the task…\nI've updated the relevant files and verified the changes.";
+    await schedule(this, reply);
+    if (this.stopped) return;
+    // Complete the follow-up turn (stream → final message → done) so the
+    // session leaves "running"; without this a follow-up never completes.
+    this.onEventRef({ type: "message", role: "agent", content: reply, final: true });
+    this.onEventRef({ type: "done", reason: "completed" });
     this.resolveSend?.();
   }
 

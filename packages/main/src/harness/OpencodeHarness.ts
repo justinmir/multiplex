@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import os from "os";
 import path from "path";
@@ -48,6 +48,10 @@ export class OpencodeHarness implements Harness {
   }
 
   async start(input: HarnessRunInput, onEvent: (event: HarnessEvent) => void): Promise<HarnessRun> {
+    // Fail fast with an actionable message when opencode isn't installed.
+    if (!existsSync(this.binPath)) {
+      throw new Error(`opencode not found at ${this.binPath}. Install it (https://opencode.ai) or set OPENCODE_BIN, then try again.`);
+    }
     const model = parseModel(input.model);
     const hostTools = input.tools ?? [];
 
@@ -68,7 +72,12 @@ export class OpencodeHarness implements Harness {
 
     const serverManager = new OpenCodeServerManager();
     // Root the server at the workspace dir so it loads our opencode.json (MCP).
-    await serverManager.start(this.binPath, input.cwd);
+    try {
+      await serverManager.start(this.binPath, input.cwd);
+    } catch (err) {
+      hostToolBridge.unregister(input.sessionId);
+      throw new Error(`Could not start the opencode server: ${err instanceof Error ? err.message : String(err)}`);
+    }
     this.serverManager = serverManager;
     const baseUrl = serverManager.getUrl()!;
 

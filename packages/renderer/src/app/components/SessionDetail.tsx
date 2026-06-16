@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  ArrowLeft, Send, GitBranch, Cpu, Square, Sparkles, Paperclip, Wrench, User, Bot,
+  ArrowLeft, Send, GitBranch, Cpu, Square, Sparkles, Wrench, User, Bot,
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder,
@@ -887,26 +887,12 @@ function Composer({ session, draft, setDraft, currentModel, availableModels, onS
               </button>
             )}
             <button
-              disabled
-              title="Repo & branch selection — coming soon"
-              className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground/50 cursor-not-allowed"
-            >
-              <GitBranch className="h-3 w-3" /> repos & branches
-            </button>
-            <button
               onClick={onAddReference}
               disabled={!onAddReference}
               title={onAddReference ? "Add a reference for the agent" : "Available once the session has started"}
               className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/50 disabled:hover:bg-transparent"
             >
               <BookOpen className="h-3 w-3" /> add reference
-            </button>
-            <button
-              disabled
-              title="File attachments — coming soon"
-              className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10.5px] text-muted-foreground/50 cursor-not-allowed"
-            >
-              <Paperclip className="h-3 w-3" /> attach
             </button>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">↵ to send · ⇧↵ newline</span>
             <button
