@@ -89,6 +89,7 @@ function sleep(ms: number): Promise<void> {
 
 export class MockHarness implements Harness {
   public readonly id = "mock" as const;
+  public readonly supportsHostTools = true;
 
   constructor(_config: HarnessConfig) { /* options not used by mock */ }
 
@@ -106,6 +107,30 @@ export class MockHarness implements Harness {
     // Phase 1: starting → running
     emit(50, { type: "status", status: "starting" });
     emit(120, { type: "status", status: "running" });
+
+    // Phase 1b: declare the first available repo via the open_repo host tool,
+    // then simulate an edit in the materialized worktree (exercises Workstream C).
+    const openRepo = input.tools?.find((t) => t.name === "open_repo");
+    const firstRepo = input.availableRepos?.[0];
+    if (openRepo && firstRepo) {
+      const toolId = `open_${input.sessionId.slice(-4)}`;
+      emit(140, { type: "tool_use", name: "open_repo", input: { repo: firstRepo }, id: toolId });
+      const t = setTimeout(async () => {
+        if (run.stopped) return;
+        const res = await openRepo.handler({ repo: firstRepo });
+        if (run.stopped) return;
+        onEvent({ type: "tool_result", id: toolId, content: res.content, isError: res.isError });
+        // Simulate an edit so the Changes rail has a real diff to show.
+        if (!res.isError && res.content) {
+          try {
+            const { writeFileSync } = await import("node:fs");
+            const { join } = await import("node:path");
+            writeFileSync(join(res.content, "MULTIPLEX_MOCK.md"), "Edited by MockHarness\n");
+          } catch { /* best effort */ }
+        }
+      }, 160);
+      run.timers.push(t);
+    }
 
     // Phase 2: stream the canned response as deltas
     let cumulative = "";

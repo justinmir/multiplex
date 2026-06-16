@@ -1,4 +1,4 @@
-import { Session, PullRequest, Reference } from "../data/mockData";
+import { Session, PullRequest, Reference, FileChange } from "../data/mockData";
 import { SessionDetail } from "./SessionDetail";
 
 interface Props {
@@ -14,9 +14,11 @@ interface Props {
   currentModel?: string;
   availableModels?: Array<{ id: string; label?: string; provider?: string }>;
   onSelectModel?: (modelId: string) => void;
+  // M-C4 — real working-tree diffs
+  worktreeChanges?: Array<{ repo: string; files: FileChange[] }>;
 }
 
-export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel }: Props) {
+export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
@@ -30,6 +32,7 @@ export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAg
       currentModel={currentModel}
       availableModels={availableModels}
       onSelectModel={onSelectModel}
+      worktreeChanges={worktreeChanges}
     />
   );
 }

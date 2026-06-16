@@ -10,6 +10,7 @@ import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import { useSessionStream } from "../lib/session/useSessionStream.js";
 import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
+import { useChanges } from "../lib/session/useChanges.js";
 import type { Session, Reference, SessionMsg, AppSettingsData } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 import { call } from "../lib/ipc/client.js";
@@ -216,6 +217,9 @@ export function AppShell() {
     }
   }, [persistedEndsWithAgent, streamingMessages.size]);
 
+  // M-C4 — live working-tree diffs for the active standalone session.
+  const { changes: worktreeChanges } = useChanges(session?.id ?? null, view === "session");
+
   // Show the overlay only while the agent's reply hasn't been persisted yet,
   // so the live stream transitions seamlessly into the saved message.
   const showOverlay = !!session && streamingMessages.size > 0 && !persistedEndsWithAgent;
@@ -269,6 +273,7 @@ export function AppShell() {
             key={effectiveSession.id}
             session={effectiveSession}
             prs={sessionPRs}
+            worktreeChanges={worktreeChanges}
             currentModel={settings?.defaultModel}
             availableModels={harnessInfo.models ?? []}
             onSelectModel={handleSelectModel}

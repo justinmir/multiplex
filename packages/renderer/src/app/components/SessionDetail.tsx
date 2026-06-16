@@ -5,7 +5,7 @@ import {
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder,
 } from "lucide-react";
-import { Session, PullRequest, ReviewComment, CheckRun, Reference, Workspace } from "../data/mockData";
+import { Session, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { ReferenceRow } from "./tabs/ReferencesTab";
@@ -32,6 +32,8 @@ interface Props {
   currentModel?: string;
   availableModels?: Array<{ id: string; label?: string; provider?: string }>;
   onSelectModel?: (modelId: string) => void;
+  // M-C4 — real working-tree diffs from the session's materialized worktrees
+  worktreeChanges?: Array<{ repo: string; files: FileChange[] }>;
 }
 
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
@@ -39,12 +41,17 @@ type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 export function SessionDetail({
   projectName, backLabel = "Back", session, prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
-  currentModel, availableModels, onSelectModel,
+  currentModel, availableModels, onSelectModel, worktreeChanges = [],
 }: Props) {
   const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
 
-  const allFiles = prs.flatMap((p) => (p.files ?? []).map((f) => ({ ...f, _prNumber: p.number, _repo: p.repo })));
+  // Working-tree diffs from the session's materialized worktrees (Workstream C),
+  // plus any files from linked PRs (Workstream B). Tagged by repo for grouping.
+  const worktreeFiles = worktreeChanges.flatMap((c) => c.files.map((f) => ({ ...f, _prNumber: 0, _repo: c.repo })));
+  const prFiles = prs.flatMap((p) => (p.files ?? []).map((f) => ({ ...f, _prNumber: p.number, _repo: p.repo })));
+  const allFiles = [...worktreeFiles, ...prFiles];
+  const multiRepo = new Set(allFiles.map((f) => f._repo)).size > 1;
   const allComments = prs.flatMap((p) => (p.comments ?? []).map((c) => ({ ...c, _prNumber: p.number, _repo: p.repo })));
   const allRuns = prs.flatMap((p) => (p.checkRuns ?? []).map((r) => ({ ...r, _prNumber: p.number, _repo: p.repo })));
 
@@ -210,7 +217,7 @@ export function SessionDetail({
                   }}
                 />
               )}
-              {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={prs.reduce((s, p) => s + p.additions, 0)} totalDels={prs.reduce((s, p) => s + p.deletions, 0)} multiPR={prs.length > 1} />}
+              {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)} totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)} multiPR={multiRepo} />}
               {railTab === "reviews" && <ReviewsRail comments={allComments} multiPR={prs.length > 1} onSendMessage={onSendMessage} session={session} />}
               {railTab === "checks" && <ChecksRail runs={allRuns} multiPR={prs.length > 1} />}
               {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} openAddTick={refAddTick} />}

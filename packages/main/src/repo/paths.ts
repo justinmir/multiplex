@@ -11,3 +11,6 @@ export function ensureDir() {
 }
 
 export function dataDir(): string { return DATA_DIR; }
+
+/** Root under which per-session workspaces (and their worktrees) live. */
+export function sessionsDir(): string { return join(DATA_DIR, "sessions"); }
