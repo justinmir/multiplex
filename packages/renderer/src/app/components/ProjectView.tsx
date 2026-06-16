@@ -20,9 +20,11 @@ interface ProjectViewProps {
   initialSessionId?: string | null;
   onSync?: () => void;
   isSyncing?: boolean;
+  /** Called when the user creates a new session from within this project view. */
+  onCreateProjectSession?: (prompt: string) => void;
 }
 
-export function ProjectView({ project, initialSessionId, onSync, isSyncing }: ProjectViewProps) {
+export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCreateProjectSession }: ProjectViewProps) {
   const [tab, setTab] = useState<TabId>(initialSessionId ? "sessions" : "overview");
   const [sessionOpen, setSessionOpen] = useState<string | "new" | null>(initialSessionId ?? null);
   const [noteFocus, setNoteFocus] = useState<string | null>(null);
@@ -123,9 +125,9 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing }: Pr
         )}
         {tab === "sessions" && (
           sessionOpen !== null ? (
-            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} />
+            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} />
           ) : (
-            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} /></div>
+            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} /></div>
           )
         )}
         {tab === "notes" && <div className="px-8 py-6"><NotesTab project={project} focusedId={noteFocus} onFocus={setNoteFocus} /></div>}
