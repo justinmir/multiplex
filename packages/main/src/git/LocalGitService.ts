@@ -1,5 +1,31 @@
 import { spawnSync } from "node:child_process";
-import type { CommitInfo, GitService, LocalBranch, RepoStatus } from "@app/core";
+import { dirname } from "node:path";
+import type { CommitInfo, GitFileChange, GitService, LocalBranch, RepoStatus } from "@app/core";
+import { git, gitOrThrow } from "./exec.js";
+
+/** Count +/- lines and extract the hunk body (from the first @@) of a unified diff. */
+function parseUnifiedDiff(raw: string): { additions: number; deletions: number; hunk: string } {
+  let additions = 0;
+  let deletions = 0;
+  const lines = raw.split("\n");
+  for (const l of lines) {
+    if (l.startsWith("+++") || l.startsWith("---")) continue;
+    if (l.startsWith("+")) additions++;
+    else if (l.startsWith("-")) deletions++;
+  }
+  const at = raw.indexOf("@@");
+  const hunk = at >= 0 ? raw.slice(at) : raw.trimEnd();
+  return { additions, deletions, hunk };
+}
+
+/** Map a porcelain XY status code to a FileChange kind. */
+function kindFromStatus(code: string): GitFileChange["kind"] {
+  const c = code.trim();
+  if (c === "??" || c.includes("A")) return "added";
+  if (c.includes("D")) return "deleted";
+  if (c.includes("R")) return "renamed";
+  return "modified";
+}
 
 /** Run a git command synchronously. Returns stdout string or empty on error. */
 function runGit(dir: string, ...args: string[]): { ok: boolean; stdout: string; stderr: string } {
@@ -101,6 +127,98 @@ export class LocalGitService implements GitService {
       authorName: lines[3],
       date: lines[4],
     };
+  }
+
+  // ---- worktree management (Workstream C) ----
+
+  async defaultBranch(repoRoot: string): Promise<string> {
+    // Prefer origin/HEAD's target.
+    const originHead = await git(repoRoot, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+    if (originHead.ok) {
+      const name = originHead.stdout.trim().replace(/^origin\//, "");
+      if (name) return name;
+    }
+    for (const candidate of ["main", "master"]) {
+      const ref = await git(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${candidate}`]);
+      if (ref.ok) return candidate;
+    }
+    const head = await git(repoRoot, ["symbolic-ref", "--short", "HEAD"]);
+    if (head.ok && head.stdout.trim()) return head.stdout.trim();
+    return "main";
+  }
+
+  async createWorktree(
+    repoRoot: string,
+    worktreePath: string,
+    branch: string,
+    baseBranch?: string,
+  ): Promise<{ worktreePath: string }> {
+    const base = baseBranch ?? (await this.defaultBranch(repoRoot));
+    await gitOrThrow(repoRoot, ["worktree", "add", "-b", branch, worktreePath, base]);
+    return { worktreePath };
+  }
+
+  async removeWorktree(worktreePath: string): Promise<void> {
+    // Resolve the main repo so `worktree remove` runs from a stable cwd.
+    const commonDir = await git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    const repoRoot = commonDir.ok ? dirname(commonDir.stdout.trim()) : worktreePath;
+    await git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+    await git(repoRoot, ["worktree", "prune"]);
+  }
+
+  async currentBranch(worktreePath: string): Promise<string> {
+    const res = await git(worktreePath, ["symbolic-ref", "--short", "HEAD"]);
+    return res.ok ? res.stdout.trim() : "";
+  }
+
+  async hasChanges(worktreePath: string): Promise<boolean> {
+    const res = await git(worktreePath, ["status", "--porcelain", "--untracked-files=all"]);
+    return res.ok && res.stdout.trim().length > 0;
+  }
+
+  async listBranches(repoRoot: string): Promise<string[]> {
+    const res = await git(repoRoot, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
+    if (!res.ok) return [];
+    return res.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  }
+
+  async diff(worktreePath: string): Promise<GitFileChange[]> {
+    const status = await git(worktreePath, ["status", "--porcelain=v1", "--untracked-files=all", "-z"]);
+    if (!status.ok) return [];
+
+    // -z output is NUL-separated; rename entries consume two records (new\0old).
+    const records = status.stdout.split("\0").filter((r) => r.length > 0);
+    const hasHead = (await git(worktreePath, ["rev-parse", "--verify", "HEAD"])).ok;
+    const out: GitFileChange[] = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+      const code = rec.slice(0, 2);
+      let path = rec.slice(3);
+      const kind = kindFromStatus(code);
+      if (kind === "renamed") {
+        // The following record is the old path; skip it.
+        i++;
+      }
+
+      const untracked = code === "??";
+      let raw = "";
+      if (untracked) {
+        const d = await git(worktreePath, ["diff", "--no-color", "--no-index", "--", "/dev/null", path]);
+        raw = d.stdout; // exits non-zero by design; stdout still holds the diff
+      } else if (hasHead) {
+        const d = await git(worktreePath, ["diff", "--no-color", "HEAD", "--", path]);
+        raw = d.stdout;
+      } else {
+        const d = await git(worktreePath, ["diff", "--no-color", "--", path]);
+        raw = d.stdout;
+      }
+
+      const { additions, deletions, hunk } = parseUnifiedDiff(raw);
+      out.push({ path, additions, deletions, hunk, kind });
+    }
+
+    return out;
   }
 }
 

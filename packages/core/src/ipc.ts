@@ -1,4 +1,4 @@
-import type { CheckRun, Note, Project, PullRequest, Reference, Session, SessionStatus } from "./domain.js";
+import type { CheckRun, FileChange, Note, Project, PullRequest, Reference, Session, SessionStatus } from "./domain.js";
 import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
@@ -61,6 +61,25 @@ export interface IpcContract {
   // M6.4 — Settings surface (consolidate)
   "settings:get": { req: void; res: AppSettingsData };
   "settings:set": { req: Partial<AppSettingsData>; res: AppSettingsData };
+
+  // M-C2 — Repo catalog (registry of available repos the agent may declare)
+  "repos:list": { req: void; res: Array<{ name: string; root: string }> };
+  "repos:add": { req: { root: string; name?: string }; res: { ok: boolean; name?: string; error?: string } };
+  "repos:remove": { req: { name: string }; res: void };
+
+  // M-C4 — Real diffs across a session's materialized worktrees
+  "session:changes": { req: { sessionId: string }; res: Array<{ repo: string; files: FileChange[] }> };
+
+  // M-B3 — Live PR detail (files / comments / checks) for a session's PRs
+  "pr:get": { req: { repo: string; number: number }; res: PullRequest | null };
+
+  // M-B4 — PR actions
+  "pr:reply": { req: { repo: string; number: number; commentId: string; body: string }; res: void };
+  "pr:rerun": { req: { repo: string; number: number }; res: void };
+  "session:address-comments": { req: { sessionId: string; comments: string[] }; res: void };
+
+  // M-B5 — Open draft PRs for every touched repo with changes
+  "session:open-pr": { req: { sessionId: string }; res: { opened: PullRequest[]; message?: string } };
 }
 
 export interface AppSettingsData {

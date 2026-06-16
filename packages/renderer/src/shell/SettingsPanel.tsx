@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Github, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Github, Loader2, CheckCircle2, AlertCircle, Plus, FolderGit2 } from "lucide-react";
 import type { AppSettingsData } from "@app/core";
 import { call } from "../lib/ipc/client";
 import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
+import { useRepos } from "../lib/repos/useRepos.js";
 import { Button } from "../app/components/ui/button";
 import { Input } from "../app/components/ui/input";
 import { Label } from "../app/components/ui/label";
@@ -250,36 +251,75 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           )}
         </div>
 
-        {/* Repo Roots Section */}
-        <div className="space-y-4 py-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Repository Roots</h3>
-
-          {settings.repoRoots.length > 0 ? (
-            settings.repoRoots.map((repo, index) => (
-              <div key={index} className="flex items-center justify-between gap-2 p-2 border rounded">
-                <span className="text-sm">{repo.name}</span>
-                <span className="text-xs text-muted-foreground truncate max-w-[180px]">{repo.root}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const newRoots = settings.repoRoots.filter((_, i) => i !== index);
-                    save({ repoRoots: newRoots });
-                  }}
-                >
-                  Remove
-                </Button>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-muted-foreground">No repository roots configured.</p>
-          )}
-
-          <p className="text-xs text-muted-foreground">
-            Add repos from the workspace picker in session composer.
-          </p>
-        </div>
+        {/* Repo Catalog Section */}
+        <RepoCatalogSection />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The repo catalog: the set of local git repos a session's agent may declare.
+ * Repos are registered here once (validated as real git repos), never picked
+ * per-session.
+ */
+function RepoCatalogSection() {
+  const { repos, add, remove } = useRepos();
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    const root = path.trim();
+    if (!root || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await add(root);
+      if (result.ok) setPath("");
+      else setError(result.error ?? "Failed to add repo");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add repo");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 py-2">
+      <div>
+        <h3 className="text-sm font-medium text-muted-foreground">Repositories</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Local git repos a session's agent can work in. Sessions never ask you to pick — the agent declares repos as it works.
+        </p>
+      </div>
+
+      {repos.length > 0 ? (
+        repos.map((repo) => (
+          <div key={repo.name} className="flex items-center justify-between gap-2 p-2 border rounded">
+            <FolderGit2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm">{repo.name}</span>
+            <span className="flex-1 truncate text-xs text-muted-foreground">{repo.root}</span>
+            <Button variant="ghost" size="sm" onClick={() => remove(repo.name)}>Remove</Button>
+          </div>
+        ))
+      ) : (
+        <p className="text-xs text-muted-foreground">No repositories registered yet.</p>
+      )}
+
+      <div className="flex gap-2">
+        <Input
+          placeholder="/absolute/path/to/repo"
+          value={path}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setError(null); setPath(e.target.value); }}
+          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleAdd(); }}
+        />
+        <Button variant="outline" size="sm" onClick={handleAdd} disabled={!path.trim() || busy}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          Add
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
   );
 }

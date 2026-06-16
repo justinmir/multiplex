@@ -32,7 +32,16 @@ export interface CommitInfo {
   date: string;
 }
 
-/** Service interface for reading local git worktree state. */
+/** A single file's change, mirrors domain.FileChange (kept structural to avoid a cycle). */
+export interface GitFileChange {
+  path: string;
+  additions: number;
+  deletions: number;
+  hunk: string;
+  kind: "added" | "modified" | "deleted" | "renamed";
+}
+
+/** Service interface for local git worktree state + worktree management. */
 export interface GitService {
   /** List all local branches in the given directory. Returns empty array if not a git dir. */
   getBranches(dir: string): Promise<LocalBranch[]>;
@@ -42,4 +51,28 @@ export interface GitService {
 
   /** Get the latest commit on a branch (or HEAD if no branch specified). Returns null if not a git dir or branch doesn't exist. */
   getLastCommit(dir: string, branch?: string): Promise<CommitInfo | null>;
+
+  // ---- worktree management (Workstream C) ----
+
+  /** Create a worktree at `worktreePath` on a new `branch` off `baseBranch`
+   *  (defaults to the repo's default branch). Returns the worktree path. */
+  createWorktree(repoRoot: string, worktreePath: string, branch: string, baseBranch?: string): Promise<{ worktreePath: string }>;
+
+  /** Remove a worktree (force) and prune the admin records. */
+  removeWorktree(worktreePath: string): Promise<void>;
+
+  /** Diff the worktree against HEAD (tracked + untracked), as FileChange[]. */
+  diff(worktreePath: string): Promise<GitFileChange[]>;
+
+  /** Current checked-out branch of a worktree ("" if detached). */
+  currentBranch(worktreePath: string): Promise<string>;
+
+  /** Resolve a sane base branch for new session branches (origin/HEAD → main → master → current). */
+  defaultBranch(repoRoot: string): Promise<string>;
+
+  /** True if the worktree has any tracked or untracked changes. */
+  hasChanges(worktreePath: string): Promise<boolean>;
+
+  /** List local branch names in a repo. */
+  listBranches(repoRoot: string): Promise<string[]>;
 }
