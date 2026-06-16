@@ -13,6 +13,8 @@ export interface Repository {
   listSessions(opts?: { projectId?: string | null }): Promise<Session[]>;
   getSession(id: string): Promise<Session | null>;
   upsertSession(s: Session, projectId: string | null): Promise<Session>;
+  /** The project a session belongs to, or null if standalone / unknown. */
+  getSessionProjectId(id: string): Promise<string | null>;
 
   // ---- notes scoped to a project ----
   getNotes(projectId: string): Promise<Note[]>;

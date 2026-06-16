@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "npx tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "exports": {

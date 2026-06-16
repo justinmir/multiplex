@@ -59,14 +59,26 @@ export class OpenCodeServerManager extends EventEmitter {
     return port;
   }
 
-  /** Stop the opencode serve server. */
+  /** Stop the opencode serve server gracefully (SIGTERM, then SIGKILL after 2s). */
   async stop(): Promise<void> {
     if (this.child) {
-      this.child.kill("SIGTERM");
+      const child = this.child;
+      child.kill("SIGTERM");
       await new Promise((resolve) => {
-        setTimeout(resolve, 2000);
-        this.child?.kill("SIGKILL");
+        const t = setTimeout(() => { child.kill("SIGKILL"); resolve(undefined); }, 2000);
+        child.once("exit", () => { clearTimeout(t); resolve(undefined); });
       });
+      this.child = null;
+    }
+    this.started = false;
+    this.port = null;
+  }
+
+  /** Kill the server immediately and synchronously (for app-quit cleanup, where
+   *  there's no time to await a graceful shutdown — avoids orphaned processes). */
+  killNow(): void {
+    if (this.child) {
+      try { this.child.kill("SIGKILL"); } catch { /* already gone */ }
       this.child = null;
     }
     this.started = false;
