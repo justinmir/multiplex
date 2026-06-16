@@ -1,10 +1,11 @@
-import type { Repository, Session, SessionMsg, Workspace, AppSettingsData, HarnessConfig, HostTool } from "@app/core";
+import type { Repository, Session, SessionMsg, Workspace, AppSettingsData, HarnessConfig, HostTool, ForgeService, PullRequest, GitService, ActivityItem } from "@app/core";
 import type { Harness, HarnessEvent, HarnessRun } from "@app/core";
 import { createHarness } from "@app/core";
 import { registerBuiltInHarnesses } from "../harness/index.js";
 import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
 import type { WorkspaceManager } from "./WorkspaceManager.js";
+import { pushBranch } from "../git/push.js";
 
 /** Configuration for session concurrency limits. */
 export interface ConcurrencyConfig {
@@ -43,18 +44,23 @@ export class SessionRuntime {
   private persistChains = new Map<string, Promise<void>>();
 
   private workspaces?: WorkspaceManager;
+  private forge?: ForgeService;
+  private git?: GitService;
 
   constructor(
     repo: Repository,
     getSettings: () => AppSettingsData,
     emit: (topic: string, payload: unknown) => void,
     workspaceManager?: WorkspaceManager,
+    deps?: { forge?: ForgeService; git?: GitService },
     config?: Partial<ConcurrencyConfig>,
   ) {
     this.repo = repo;
     this.settingsFn = getSettings;
     this.emitFn = emit;
     this.workspaces = workspaceManager;
+    this.forge = deps?.forge;
+    this.git = deps?.git;
     this.concurrencyConfig = { ...DEFAULT_CONCURRENCY, ...config };
 
     // Ensure built-in harnesses are registered
@@ -74,6 +80,72 @@ export class SessionRuntime {
     const session = await this.repo.getSession(sessionId);
     if (!session) return [];
     return this.workspaces.diffAll(session.workspaces);
+  }
+
+  /**
+   * Open one draft PR per touched repo that has changes (M-B5 fan-out). Pushes
+   * each materialized worktree's session branch, opens a draft PR, and appends
+   * them all to the session's linkedPRs.
+   */
+  async openPullRequests(sessionId: string): Promise<{ opened: PullRequest[]; message?: string }> {
+    if (!this.workspaces || !this.forge || !this.git) {
+      return { opened: [], message: "PR support is unavailable (no forge/git configured)." };
+    }
+    const session = await this.repo.getSession(sessionId);
+    if (!session) return { opened: [], message: "Session not found." };
+
+    const changed = await this.workspaces.changedWorkspaces(session.workspaces);
+    if (changed.length === 0) {
+      return { opened: [], message: "Nothing to open a PR for yet — no repository has changes." };
+    }
+
+    const opened: PullRequest[] = [];
+    const errors: string[] = [];
+    for (const ws of changed) {
+      if (!ws.worktree) continue;
+      try {
+        await pushBranch(ws.worktree, ws.branch);
+        const base = await this.git.defaultBranch(ws.worktree);
+        const pr = await this.forge.openDraftPR({
+          repo: ws.repo,
+          title: session.title,
+          head: ws.branch,
+          base,
+          body: session.prompt ? `Opened by Multiplex session.\n\n> ${session.prompt}` : undefined,
+          draft: true,
+        });
+        opened.push(pr);
+      } catch (err) {
+        errors.push(`${ws.repo}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    if (opened.length > 0) {
+      const projectId = await this.repo.getSessionProjectId(sessionId);
+      const fresh = await this.repo.getSession(sessionId);
+      await this.repo.upsertSession(
+        { ...(fresh ?? session), linkedPRs: [...((fresh ?? session).linkedPRs ?? []), ...opened] },
+        projectId,
+      );
+      // Activity per opened PR (project-scoped sessions only).
+      if (projectId) {
+        for (const pr of opened) {
+          const item: ActivityItem = {
+            id: `act_pr_${pr.repo}_${pr.number}_${Date.now()}`,
+            kind: "pr",
+            text: `Opened draft PR ${pr.repo}#${pr.number} — ${pr.title}`,
+            ts: new Date().toISOString(),
+          };
+          await this.repo.appendActivity(projectId, item);
+        }
+      }
+      this.emitFn("data:changed", { kind: "session" });
+    }
+
+    const message = errors.length > 0
+      ? `Opened ${opened.length} PR(s); ${errors.length} failed: ${errors.join("; ")}`
+      : undefined;
+    return { opened, message };
   }
 
   /** Check how many sessions can still be started. */
