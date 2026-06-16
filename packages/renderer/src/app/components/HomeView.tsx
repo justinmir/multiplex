@@ -2,6 +2,7 @@ import { ChevronRight, Cpu, GitBranch, GitPullRequest, Zap, Plus, Folder } from 
 import { useState } from "react";
 import { Project, Session, SessionStatus } from "../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo, sessionWeight } from "./SessionStateBadge";
+import { formatRelativeTime } from "../../lib/format/time.js";
 
 interface Props {
   projects: Project[];
@@ -230,7 +231,7 @@ function SessionRow({ row, divider, showState = false }: { row: Row; divider: bo
         </div>
       </div>
       <span className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
-        {s.status === "running" ? <SessionStateIndicator status="running" size={12} /> : s.startedAt}
+        {s.status === "running" ? <SessionStateIndicator status="running" size={12} /> : formatRelativeTime(s.createdAtMs)}
       </span>
       <ChevronRight className="mt-0.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </button>

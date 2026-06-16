@@ -84,6 +84,14 @@ export function AppShell() {
     }
   }, [projects, dataSessions]);
 
+  // Keep the local session list in sync with the data layer. `dataSessions`
+  // starts empty and is populated asynchronously (and again on every
+  // data:changed reload), so without this the sidebar/Home would never show
+  // standalone sessions and freshly created ones couldn't be opened.
+  useEffect(() => {
+    setSessions(dataSessions);
+  }, [dataSessions]);
+
   const markRead = (key: string) => {
     setUnread((prev) => {
       if (!prev.has(key)) return prev;

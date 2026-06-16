@@ -9,6 +9,7 @@ import { Session, PullRequest, ReviewComment, CheckRun, Reference, Workspace } f
 import { useDataMutations } from "../../lib/data/DataProvider.js";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { ReferenceRow } from "./tabs/ReferencesTab";
+import { formatRelativeTime } from "../../lib/format/time.js";
 
 interface Props {
   /** Optional parent project name. When set, shows a small breadcrumb above the title. */
@@ -113,8 +114,11 @@ export function SessionDetail({
                 <span className="ml-1"><SessionStateIndicator status="running" size={14} /></span>
                 <button
                   onClick={() => {
-                    if (session) mutations.stopAgent(session.id);
-                    onStopAgent?.();
+                    // Prefer the parent handler (it owns the stop flow); only fall
+                    // back to a direct mutation when none was wired (e.g. the
+                    // project session view). Calling both double-fires the IPC.
+                    if (onStopAgent) onStopAgent();
+                    else mutations.stopAgent(session.id);
                   }}
                   className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-foreground hover:bg-secondary"
                 >
@@ -282,7 +286,7 @@ function OverviewRail({ session, prs, onMergePR, onOpenGitHub }: { session: Sess
           <Meta k="duration" v={`${session.durationMin}m`} />
           <Meta k="tokens" v={`${(session.tokens / 1000).toFixed(1)}k`} />
           <Meta k="cost" v={`$${session.cost.toFixed(2)}`} />
-          <Meta k="started" v={session.startedAt} />
+          <Meta k="started" v={formatRelativeTime(session.createdAtMs)} />
         </dl>
       </RailBlock>
     </div>
@@ -411,7 +415,7 @@ function Message({ role, content, ts }: { role: "user" | "agent" | "tool"; conte
       <div className="rounded-md border border-border bg-secondary/40 px-3.5 py-2.5">
         <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           <Wrench className="h-3 w-3" /> tool output
-          <span className="ml-auto normal-case tracking-normal">{ts}</span>
+          <span className="ml-auto normal-case tracking-normal">{formatRelativeTime(ts)}</span>
         </div>
         <pre className="whitespace-pre-wrap font-mono text-[12px] text-foreground/80">{content}</pre>
       </div>
@@ -430,7 +434,7 @@ function Message({ role, content, ts }: { role: "user" | "agent" | "tool"; conte
         <div className="mb-1 flex items-center gap-2 font-mono text-[10.5px] text-muted-foreground">
           <span>{meta.label}</span>
           <span className="text-muted-foreground/40">·</span>
-          <span>{ts}</span>
+          <span>{formatRelativeTime(ts)}</span>
         </div>
         <p className="text-[13.5px] leading-relaxed text-foreground">{content}</p>
       </div>
@@ -556,7 +560,7 @@ function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comme
         {comment.kind === "inline" && comment.path && (
           <span className="truncate font-mono text-[10px] text-muted-foreground">{comment.path}:{comment.line}</span>
         )}
-        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{comment.ts}</span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{formatRelativeTime(comment.ts)}</span>
       </div>
       <div className="px-2.5 py-2 text-[12.5px] text-foreground">{comment.body}</div>
 
@@ -564,7 +568,7 @@ function ReviewCommentCard({ comment, multiPR, onSendMessage, session }: { comme
         <div className="space-y-1 border-t border-border/60 bg-background/40 px-2.5 py-2">
           {comment.replies.map((r, i) => (
             <div key={i} className="text-[12px]">
-              <span className="font-mono text-[10px] text-muted-foreground">{r.author} · {r.ts}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{r.author} · {formatRelativeTime(r.ts)}</span>
               <p className="text-foreground">{r.body}</p>
             </div>
           ))}

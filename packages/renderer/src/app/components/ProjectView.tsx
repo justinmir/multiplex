@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { MoreHorizontal, Play, Star, RefreshCw } from "lucide-react";
-import { Project, Reference } from "../data/mockData";
+import { Project } from "../data/mockData";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SessionsTab } from "./tabs/SessionsTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { ReferencesTab } from "./tabs/ReferencesTab";
+import { useDataMutations } from "../../lib/data/DataProvider.js";
 
 type TabId = "overview" | "sessions" | "notes" | "references";
 
@@ -25,16 +26,15 @@ interface ProjectViewProps {
 }
 
 export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCreateProjectSession }: ProjectViewProps) {
+  const mutations = useDataMutations();
   const [tab, setTab] = useState<TabId>(initialSessionId ? "sessions" : "overview");
   const [sessionOpen, setSessionOpen] = useState<string | "new" | null>(initialSessionId ?? null);
   const [noteFocus, setNoteFocus] = useState<string | null>(null);
-  const [references, setReferences] = useState<Reference[]>(project.references);
 
   useEffect(() => {
     setTab(initialSessionId ? "sessions" : "overview");
     setSessionOpen(initialSessionId ?? null);
     setNoteFocus(null);
-    setReferences(project.references);
   }, [project.id, initialSessionId]);
 
   const openSession = (id: string | "new") => {
@@ -119,7 +119,7 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
               onOpenSession={openSession}
               onOpenNote={openNote}
               onOpenTab={(t) => setTab(t)}
-              references={references}
+              references={project.references}
             />
           </div>
         )}
@@ -134,8 +134,8 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
         {tab === "references" && (
           <div className="px-8 py-6">
             <ReferencesTab
-              references={references}
-              onAdd={(r) => setReferences((prev) => [r, ...prev])}
+              references={project.references}
+              onAdd={(r) => mutations.upsertReference({ projectId: project.id }, r)}
             />
           </div>
         )}
