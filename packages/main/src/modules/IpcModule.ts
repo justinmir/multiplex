@@ -12,6 +12,7 @@ import { registerSyncHandlers } from "../ipc/handlers/sync.js";
 import { registerSessionWriteHandlers } from "../ipc/handlers/session-writes.js";
 import { registerAppHandlers } from "../ipc/handlers/app.js";
 import { registerSettingsHandlers } from "../ipc/handlers/settings.js";
+import { registerRepoHandlers } from "../ipc/handlers/repos.js";
 import { SessionRuntime } from "../session/SessionRuntime.js";
 import { setSessionRuntime } from "../session/runtime.js";
 import { registerSessionRuntimeHandlers } from "../ipc/handlers/session.js";
@@ -77,6 +78,9 @@ export function createIpcModule(): AppModule {
 
       // M6.4: Settings surface (consolidate) — harness, tokens, repos, intelligence
       registerSettingsHandlers();
+
+      // M-C2: Repo catalog (registry of available repos the agent may declare)
+      registerRepoHandlers();
     },
   };
 }
