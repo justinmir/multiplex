@@ -8,6 +8,7 @@ import {autoUpdater} from './modules/AutoUpdater.js';
 import {allowInternalOrigins} from './modules/BlockNotAllowdOrigins.js';
 import {allowExternalUrls} from './modules/ExternalUrls.js';
 import {createIpcModule} from './modules/IpcModule.js';
+import {createShutdownModule} from './modules/ShutdownModule.js';
 
 
 export async function initApp(initConfig: AppInitConfig) {
@@ -17,6 +18,8 @@ export async function initApp(initConfig: AppInitConfig) {
     .init(terminateAppOnLastWindowClose())
     .init(hardwareAccelerationMode({enable: false}))
     .init(autoUpdater())
+    // M-A7: Graceful shutdown with session cleanup
+    .init(createShutdownModule())
     .init(createIpcModule())
 
     // Install DevTools extension if needed

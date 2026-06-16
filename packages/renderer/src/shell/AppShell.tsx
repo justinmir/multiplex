@@ -8,8 +8,11 @@ import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
-import type { Session, Reference, SessionMsg } from "@app/core";
+import { useSessionStream } from "../lib/session/useSessionStream.js";
+import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
+import type { Session, Reference, SessionMsg, AppSettingsData } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
+import { call } from "../lib/ipc/client.js";
 
 const projectKey = (pid: string, sid: string) => `p/${pid}/${sid}`;
 const standaloneKey = (sid: string) => `s/${sid}`;
@@ -28,13 +31,16 @@ function computeInitialUnread(projectsArg: ReturnType<typeof useProjects>, sessi
   ]);
 }
 
-function NewSessionView({ onStart, onClose }: { onStart: (prompt: string) => void; onClose: () => void }) {
+function NewSessionView({ onStart, onClose, currentModel, availableModels, onSelectModel }: { onStart: (prompt: string) => void; onClose: () => void; currentModel?: string; availableModels?: Array<{ id: string; label?: string; provider?: string }>; onSelectModel?: (modelId: string) => void }) {
   return (
     <SessionDetail
       backLabel="Home"
       session={null}
       onStartSession={onStart}
       onClose={onClose}
+      currentModel={currentModel}
+      availableModels={availableModels}
+      onSelectModel={onSelectModel}
     />
   );
 }
@@ -61,6 +67,19 @@ export function AppShell() {
 
   // M6.3 — Global search palette (⌘K)
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // M-A8 — Load settings for harness/model state
+  const [settings, setSettings] = useState<AppSettingsData | null>(null);
+  useEffect(() => {
+    call("settings:get", undefined).then((data) => setSettings(data));
+  }, []);
+
+  // M-A8 — Always fetch models for current harness so we can show in composer
+  const { info: harnessInfo } = useHarnessInfo(settings?.harnessId, !!settings);
+
+  const handleSelectModel = (modelId: string) => {
+    call("settings:set", { defaultModel: modelId }).then((updated) => setSettings(updated));
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -127,69 +146,81 @@ export function AppShell() {
     await mutations.upsertSessionReference(sessionId, ref);
   };
 
-  // M3.4 — agent workflow foundation handlers
+  // M3.4 — agent workflow foundation handlers (M-A5 runtime)
   const sendMessageToSession = async (messageText: string) => {
     if (!session) return;
-    const msg: SessionMsg = {
-      role: "user",
-      content: messageText,
-      ts: new Date().toISOString(),
-    };
-    await mutations.addMessage(session.id, msg);
-    // Trigger agent execution after persisting the user message
-    await mutations.startAgent(session.id);
+    await mutations.sendToSession(session.id, messageText);
   };
 
   const stopSessionAgent = async () => {
     if (!session) return;
-    await mutations.stopAgent(session.id);
+    await mutations.stopSessionViaRuntime(session.id);
   };
 
   const createSession = async (prompt: string) => {
-    const id = `ss_${Date.now().toString(36)}`;
-    const title = prompt.length > 60 ? prompt.slice(0, 60).trim() + "…" : prompt;
-    const next: Session = {
-      id, title, prompt,
-      status: "running",
-      model: "claude-sonnet-4-6",
-      workspaces: [],
-      startedAt: "just now",
-      createdAtMs: Date.now(),
-      durationMin: 0, tokens: 0, cost: 0,
-      messages: [
-        { role: "user", content: prompt, ts: "just now" },
-        { role: "agent", content: "Spinning up a fresh workspace and getting started.", ts: "just now" },
-      ],
-    };
-    await mutations.createSession(next);
-    openSession(id);
+    try {
+      const { sessionId } = await mutations.startSession({ prompt });
+      openSession(sessionId);
+    } catch (err) {
+      console.error("Failed to create session:", err);
+    }
   };
 
-  // M5.1 — project-scoped session creation
+  // M5.1 — project-scoped session creation (M-A5 runtime)
   const handleCreateProjectSession = async (prompt: string, projectId: string) => {
-    const id = `ss_${Date.now().toString(36)}`;
-    const title = prompt.length > 60 ? prompt.slice(0, 60).trim() + "…" : prompt;
-    const next: Session = {
-      id, title, prompt,
-      status: "running",
-      model: "claude-sonnet-4-6",
-      workspaces: [],
-      startedAt: "just now",
-      createdAtMs: Date.now(),
-      durationMin: 0, tokens: 0, cost: 0,
-      messages: [
-        { role: "user", content: prompt, ts: "just now" },
-        { role: "agent", content: "Spinning up a fresh workspace and getting started.", ts: "just now" },
-      ],
-    };
-    await mutations.createSession(next, projectId);
-    // Navigate to the new session within project context
-    openProject(projectId, id);
+    try {
+      const { sessionId } = await mutations.startSession({ prompt, projectId });
+      openProject(projectId, sessionId);
+    } catch (err) {
+      console.error("Failed to create project session:", err);
+    }
   };
 
   // Resolve PRs for the current standalone session against any project that hosts a matching repo
   const session = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const sessionPRs = session?.linkedPRs ?? [];
+
+  // M-A5 — Subscribe to live harness events for the active session.
+  // Deltas are accumulated into local state and merged with the persisted session
+  // so the UI shows real-time streaming output before the data layer refreshes.
+  const [streamingMessages, setStreamingMessages] = useState<Map<string, SessionMsg>>(new Map());
+
+  // Reset streaming overlay when switching sessions
+  useEffect(() => {
+    setStreamingMessages(new Map());
+  }, [selectedSessionId]);
+
+  useSessionStream(session?.id ?? null, (event) => {
+    if (!session) return;
+    switch (event.type) {
+      case "message_delta": {
+        // Append delta text to the last streaming message for this sessionId
+        setStreamingMessages((prev) => {
+          const next = new Map(prev);
+          const existing = next.get("current") ?? { role: "agent", content: "", ts: new Date().toISOString() };
+          next.set("current", { ...existing, content: existing.content + event.delta });
+          return next;
+        });
+        break;
+      }
+      case "message": {
+        // Final message arrived — the data layer will pick it up on next refresh.
+        // Clear streaming overlay so we don't show stale partial text.
+        setStreamingMessages(new Map());
+        break;
+      }
+    }
+  });
+
+  // Merge streaming deltas into effective messages for display
+  const effectiveSession = session ? {
+    ...session,
+    messages: [
+      ...(streamingMessages.size > 0
+        ? [...session.messages, streamingMessages.get("current")!]
+        : session.messages),
+    ],
+  } : null;
 
   // Determine if we're inside a project session view (for sidebar highlight)
   const selectedProjectSessionId = view === "project" ? projectInitialSession : null;
@@ -229,12 +260,15 @@ export function AppShell() {
         {view === "project" && project && (
           <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} onSync={() => mutations.syncProject(selectedProjectId)} isSyncing={isSyncing} onCreateProjectSession={(prompt) => handleCreateProjectSession(prompt, selectedProjectId)} />
         )}
-        {view === "session" && session && (
+        {view === "session" && effectiveSession && (
           <TaskView
-            key={session.id}
-            session={session}
+            key={effectiveSession.id}
+            session={effectiveSession}
             prs={sessionPRs}
-            onAddReference={(r) => addReferenceToSession(session.id, r)}
+            currentModel={settings?.defaultModel}
+            availableModels={harnessInfo.models ?? []}
+            onSelectModel={handleSelectModel}
+            onAddReference={(r) => addReferenceToSession(effectiveSession.id, r)}
             onSendMessage={sendMessageToSession}
             onStopAgent={stopSessionAgent}
             onClose={() => setView("home")}
@@ -243,6 +277,9 @@ export function AppShell() {
         {view === "new-session" && (
           <NewSessionView
             onStart={createSession}
+            currentModel={settings?.defaultModel}
+            availableModels={harnessInfo.models ?? []}
+            onSelectModel={handleSelectModel}
             onClose={() => setView("home")}
           />
         )}

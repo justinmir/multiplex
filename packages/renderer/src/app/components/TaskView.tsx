@@ -10,9 +10,13 @@ interface Props {
   /** Called when user clicks Stop while agent is running. */
   onStopAgent?: () => void;
   onClose: () => void;
+  // M-A8 — model selection
+  currentModel?: string;
+  availableModels?: Array<{ id: string; label?: string; provider?: string }>;
+  onSelectModel?: (modelId: string) => void;
 }
 
-export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose }: Props) {
+export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
@@ -23,6 +27,9 @@ export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAg
       onSendMessage={onSendMessage}
       onStopAgent={onStopAgent}
       onClose={onClose}
+      currentModel={currentModel}
+      availableModels={availableModels}
+      onSelectModel={onSelectModel}
     />
   );
 }

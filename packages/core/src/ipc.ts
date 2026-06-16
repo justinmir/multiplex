@@ -44,6 +44,18 @@ export interface IpcContract {
   "agents:start": { req: { sessionId: string }; res: void };
   "agents:stop": { req: { sessionId: string }; res: void };
 
+  // M-A4 — Session runtime (replaces stub with real agent harness)
+  "session:start": {
+    req: { sessionId?: string; prompt: string; projectId?: string | null; model?: string };
+    res: { sessionId: string };
+  };
+  "session:send": { req: { sessionId: string; message: string }; res: void };
+  "session:stop": { req: { sessionId: string }; res: void };
+
+  // M-A8 — Harness health + model list
+  "harness:health": { req: { harnessId: string }; res: { ok: boolean; version?: string; detail?: string } };
+  "harness:models": { req: { harnessId: string }; res: Array<{ id: string; label?: string; provider?: string }> };
+
   // M4.3 — PR merge + external links
   "prs:merge": { req: { owner: string; repo: string; prNumber: number }; res: { success: boolean } };
   "app:open-url": { req: { url: string }; res: void };
