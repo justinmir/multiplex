@@ -88,7 +88,7 @@ main     ──imports──▶ core         (everything)
 renderer ─NEVER────▶ main          (only via preload IPC)
 core     ──imports──▶ (nothing app-specific; no electron, no node fs in public API)
 ```
-Anything heavy (git, octokit, anthropic, child_process, db) lives **only in
+Anything heavy (git, octokit, opencode, child_process, db) lives **only in
 main**. The renderer reaches it through typed IPC. This is what makes the harness
 (and everything else) pluggable and testable.
 
@@ -99,7 +99,7 @@ main**. The renderer reaches it through typed IPC. This is what makes the harnes
 | Agent harness | `Harness` + `HarnessFactory` | `MockHarness`, then `OpencodeHarness` | `ClaudeHarness`, `CodexHarness` |
 | Git / worktrees | `GitService` | `LocalGitService` (spawns `git`) | isomorphic-git, etc. |
 | Forge (PRs/reviews/checks) | `ForgeService` | `GitHubForgeService` (octokit) | GitLab, etc. |
-| Intelligence (summaries) | `IntelligenceProvider` | `AnthropicIntelligence` | any LLM |
+| Intelligence (summaries) | `IntelligenceProvider` | `OpencodeIntelligence` (drives opencode) | any LLM |
 
 > **The harness is the keystone.** Build the interface (M2.1) and a `MockHarness`
 > (M2.2) **before** touching opencode, so the whole session pipeline can be
@@ -155,11 +155,11 @@ PHASE 2  Harness abstraction (the keystone)
   M2.7  Concurrency, lifecycle, crash recovery for harness processes
   M2.8  Harness selection in Settings (opencode default; mock for dev)
 
-PHASE 3  Workspaces & Git
-  M3.1  GitService interface + LocalGitService (clone-aware, worktrees)
-  M3.2  Repo registry (configured repo roots) + repo/branch picker data
-  M3.3  Session→workspace creation; harness runs in the worktree
-  M3.4  Changes rail: real diffs from the worktree
+PHASE 3  Git: invisible per-repo worktrees (plumbing, not a user feature)
+  M3.1  GitService interface + LocalGitService (worktrees, diff, base branch)
+  M3.2  Repo catalog (registered repo roots) — NO per-session picker
+  M3.3  Session workspace root; agent-declared, lazy per-repo worktrees
+  M3.4  Changes rail: real diffs across every materialized worktree
 
 PHASE 4  Forge: PRs, reviews, checks
   M4.1  ForgeService interface + GitHubForgeService (auth, rate-limit safe)
@@ -168,7 +168,7 @@ PHASE 4  Forge: PRs, reviews, checks
   M4.4  PR actions: reply, ask-agent/address-all, re-run checks, merge
 
 PHASE 5  Project intelligence (LLM)
-  M5.1  IntelligenceProvider interface + AnthropicIntelligence (streaming)
+  M5.1  IntelligenceProvider interface + OpencodeIntelligence (drives opencode)
   M5.2  Context assembly (notes + refs + state) — the R-INTEL-5 contract
   M5.3  Generate summary + next steps; persist with freshness stamp
   M5.4  Triggers: on-demand button, on-activity debounce, daily synthesis
@@ -779,11 +779,14 @@ opencode/claude/codex interchangeable.
      sessionId: string;            // our id, used to correlate events
      prompt: string;
      model?: string;               // harness-specific model id; optional
-     cwd: string;                  // working directory / worktree root
-     workspaces: Workspace[];      // repos+branches in scope
+     cwd: string;                  // working directory (the SESSION WORKSPACE ROOT; Phase 3)
+     workspaces: Workspace[];      // materialized per-repo worktrees (populated lazily; Phase 3)
      references?: { title: string; url?: string; body?: string }[]; // context
      notes?: { title: string; body: string }[];                    // context
    }
+   // Phase 3 extends this with `availableRepos: string[]` (the declarable repo
+   // catalog) and host-executed `tools?: HostTool[]` (e.g. `open_repo`), so the
+   // agent declares repos and each materializes its own worktree on first touch.
 
    /** Normalized stream events every harness must emit. */
    export type HarnessEvent =
@@ -1088,16 +1091,25 @@ default; mock remains for tests. Adding `claude`/`codex` later = one adapter fil
 
 ---
 
-# PHASE 3 — Workspaces & Git
+# PHASE 3 — Git: invisible per-repo worktrees
 
-Goal: sessions operate in real repos/worktrees; the Changes rail shows real diffs.
+Goal: sessions **always** run in worktrees, but worktrees are a pure
+implementation detail. A session may touch many repos; each touched repo gets its
+own worktree on a shared session branch (**many repos → one session**). The
+engineer never picks repos — they are **agent-declared and lazily materialized**
+on first touch. The Changes rail shows real diffs across every materialized
+worktree.
+
+> **Detailed, hand-to-agent version:** `docs/plans/workstream-c-workspaces-git.md`
+> is the authoritative expansion of this phase (same milestones, more detail).
+> This section is the summary; keep the two in sync.
 
 ---
 
 ## M3.1 — `GitService` interface + `LocalGitService`
 
-**Goal.** Abstract git operations (worktree create/remove, branch, status, diff)
-behind an interface; implement by spawning `git`.
+**Goal.** Abstract git operations (worktree create/remove, diff, base-branch
+resolution) behind an interface; implement by spawning `git`.
 
 **Files**
 - `+ packages/core/src/git.ts` (interface + types)
@@ -1113,6 +1125,8 @@ behind an interface; implement by spawning `git`.
      status(worktreePath: string): Promise<GitFileStatus[]>;
      diff(worktreePath: string): Promise<GitFileDiff[]>; // maps to FileChange[]
      currentBranch(worktreePath: string): Promise<string>;
+     defaultBranch(repoRoot: string): Promise<string>;   // base for new session branches
+     hasChanges(worktreePath: string): Promise<boolean>; // drives "which repos get a PR"
      listBranches(repoRoot: string): Promise<string[]>;
    }
    ```
@@ -1121,9 +1135,11 @@ behind an interface; implement by spawning `git`.
 3. `LocalGitService` — implement using `git worktree add/remove`, `git status
    --porcelain`, `git diff --numstat` + per-file hunks, mapped to the existing
    `FileChange` shape (`path, additions, deletions, hunk, kind`).
+   `defaultBranch` resolves `origin/HEAD` (fallback main/master/HEAD).
 
-**Acceptance** — unit test against a temp git repo: create worktree, write a file,
-`diff()` returns the change in `FileChange` shape.
+**Acceptance** — unit test against a temp git repo: create a worktree on a new
+branch, write a file, `diff()` returns the change in `FileChange` shape and
+`hasChanges()` is true.
 
 **Validate**
 ```sh
@@ -1136,80 +1152,107 @@ worktrees defensively.
 
 ---
 
-## M3.2 — Repo registry + repo/branch picker data
+## M3.2 — Repo catalog (registered roots) — **no per-session picker**
 
-**Goal.** Users register local repo roots; the composer's "repos & branches"
-picker is backed by real data.
+**Goal.** Maintain a validated **catalog** of local repos the agent may later
+draw from. This is *not* a session picker — repos are plumbing, registered once in
+Settings, that an agent declares per session (M3.3).
 
 **Files**
-- `~ packages/core/src/ipc.ts` (`repos:list`, `repos:add`, `repos:branches`)
-- `+ packages/main/src/git/RepoRegistry.ts` (persist repo roots in settings)
+- `~ packages/core/src/ipc.ts` (`repos:list`, `repos:add`, `repos:remove`)
+- `+ packages/main/src/git/RepoRegistry.ts` (persist roots in settings; resolve
+  identifier → root)
 - `+ packages/renderer/src/lib/repos/useRepos.ts`
-- `~ packages/renderer/src/shell/...` (wire the existing "repos & branches" button)
+- `~ packages/renderer/src/shell/SettingsPanel.tsx` (validated add-root flow)
 
 **Steps**
 1. Persist a list of `{ name, root }` repo roots. Validate each is a git repo on
-   add (`git rev-parse`).
-2. `repos:branches` returns `listBranches(root)`.
-3. The composer already renders a "repos & branches" affordance; back it with a
-   small picker populated from `useRepos()`.
+   add (`git rev-parse`). `RepoRegistry.resolve(repo)` maps a repo identifier
+   (`Workspace.repo` / `Project.repos[]`) → local root.
+2. Settings is the **only** place repos are registered. **Do not** wire the
+   composer's dead "repos & branches" affordance to a picker — remove the notion
+   of per-session repo selection entirely.
 
-**Acceptance** — add a repo root; it appears in the picker with its branches.
+**Acceptance** — add a repo root in Settings (validated); it is resolvable by
+identifier. The composer has no repo/branch selection.
 
-**Validate** — `npm start`: add a repo, open the picker, see branches.
+**Validate** — `npm start`: add a repo in Settings; confirm the composer shows no
+repo picker.
 
 ---
 
-## M3.3 — Session → workspace creation; harness runs in the worktree
+## M3.3 — Session workspace root; agent-declared, lazy per-repo worktrees
 
-**Goal.** Starting a session with selected workspaces creates a worktree per repo
-and runs the harness with `cwd = worktree`.
+**Goal.** Every session gets a workspace **root** (the harness `cwd`); the agent
+**declares** repos as it works, each declaration materializing a worktree on first
+touch under that root, on a shared session branch.
 
 **Files**
-- `~ packages/main/src/session/SessionRuntime.ts` (create worktrees before start; pass cwd)
-- `~ packages/main/src/harness/opencode/OpencodeHarness.ts` (honor `cwd`)
-- `~ packages/core/src/ipc.ts` (`StartSessionReq.workspaces` already present)
+- `~ packages/core/src/harness/types.ts` (extend `HarnessRunInput`: add `cwd`
+  = workspace root, `availableRepos: string[]`, host `tools?: HostTool[]`)
+- `+ packages/main/src/session/WorkspaceManager.ts` (workspace root + worktree
+  materialization via `GitService`)
+- `~ packages/main/src/session/SessionRuntime.ts` (create the root; set `cwd`;
+  provide the `open_repo` host tool + the catalog; persist `Workspace`s as they
+  materialize)
+- `~ packages/main/src/harness/opencode/OpencodeHarness.ts` (surface host tools;
+  route invocations back to their handler — **spike** the opencode mechanism)
 
 **Steps**
-1. On `startSession`, for each requested `Workspace`, call
-   `git.createWorktree(repoRoot, branch)`; set `HarnessRunInput.cwd` to the (first)
-   worktree and pass all workspaces. Persist `worktree` on each `Workspace`.
-2. On session completion or archive, optionally `removeWorktree` (gated by a
-   setting — keep worktrees by default so users can inspect/PR them).
+1. On `startSession`, create a managed workspace root keyed by session; set
+   `HarnessRunInput.cwd` to it; `workspaces` starts **empty**. Populate
+   `availableRepos` from `RepoRegistry` (project repos first as a hint, but any
+   registered repo is declarable).
+2. Provide an `open_repo({ repo })` host tool: resolve root → `git.createWorktree`
+   (idempotent per session) under `<root>/<repo>/` on `multiplex/<session>` →
+   record the `Workspace` and emit a `workspace` event → return the worktree path.
+   The agent calls it the first time it needs a repo; undeclared repos materialize
+   nothing. **Fallback** if opencode can't host-execute tools: materialize on the
+   first file/bash access under `<root>/<knownRepo>/`. Document the choice in
+   `harness/opencode/SPIKE.md`.
+3. On archive/delete, optionally `removeWorktree` each materialized worktree —
+   gated by a setting, **keep by default** so users can inspect/PR them.
 
-**Acceptance** — a session creates a branch+worktree; the agent's file edits land
-there; the workspace shows in the Overview rail with repo/branch.
+**Acceptance** — a session starts with only a workspace root; declaring a repo
+creates exactly one worktree+branch there and adds one `Session.workspaces` entry;
+a second declared repo adds a second worktree on the same branch name; undeclared
+repos get nothing.
 
-**Validate** — `npm start`: run "create hello.txt" against a registered repo;
-confirm the worktree exists on disk with the new file on the agent branch.
+**Validate** — `npm start`: run a task that edits one registered repo; confirm a
+single worktree on the session branch with the change. Run a two-repo task;
+confirm two worktrees, one shared branch.
 
 ---
 
-## M3.4 — Changes rail: real diffs
+## M3.4 — Changes rail: real diffs across every materialized worktree
 
-**Goal.** The session's Changes rail shows actual file diffs from the worktree,
-grouped by repo, with working +/− and expandable hunks.
+**Goal.** The session's Changes rail shows actual file diffs from **all** of the
+session's materialized worktrees, grouped by repo, with working +/− and
+expandable hunks. Empty until the agent has touched a repo.
 
 **Files**
 - `~ packages/core/src/ipc.ts` (`session:changes` → `FileChange[]` per repo)
-- `+ packages/main/src/ipc/handlers/changes.ts` (call `git.diff` per workspace)
+- `+ packages/main/src/ipc/handlers/changes.ts` (call `git.diff` per materialized workspace)
 - `+ packages/renderer/src/lib/session/useChanges.ts`
 - (No `ChangesRail` edits: it already renders `FileChange[]` grouped by repo.)
 
 **Steps**
-1. Handler returns `git.diff(worktree)` for each workspace, tagged by repo, in the
-   `FileChange` shape the rail consumes.
+1. Handler returns `git.diff(worktree)` for each materialized workspace, tagged by
+   repo, in the `FileChange` shape the rail consumes. Empty before any repo is
+   declared.
 2. Renderer fetches on demand (when the Changes tab opens) and on session events
-   that imply file changes; refresh after agent turns.
+   that imply file changes — including the `workspace` event so a newly
+   materialized repo appears; refresh after agent turns.
 
-**Acceptance** — after the agent edits files, the Changes tab lists them with
-diffs that match `git diff` in the worktree.
+**Acceptance** — after the agent edits files in one or more repos, the Changes tab
+lists them grouped by repo with diffs matching `git diff` in each worktree.
 
-**Validate** — `npm start`: run an edit task, open Changes, compare to terminal
-`git -C <worktree> diff`.
+**Validate** — `npm start`: run a multi-repo edit task, open Changes, compare each
+repo group to terminal `git -C <worktree> diff`.
 
-**Phase 3 exit criteria** — agents work in real worktrees; the Changes surface is
-real. Still local-only (no PRs).
+**Phase 3 exit criteria** — agents always work in worktrees, materialized lazily
+per declared repo; worktrees are invisible plumbing; the Changes surface is real.
+Still local-only (no PRs).
 
 ---
 
@@ -1259,28 +1302,35 @@ conclusions to the `CheckRun.status` union precisely.
 
 ---
 
-## M4.2 — Open draft PR(s) from a session
+## M4.2 — Open draft PR(s) from a session — fan-out across touched repos
 
-**Goal.** A session can push its branch(es) and open a draft PR per repo;
-`linkedPRs` persists.
+**Goal.** A single "Open PR" action pushes **each touched repo's** session branch
+and opens one draft PR per repo that has changes; `linkedPRs` (an array) persists
+all of them, linked to the one session. The worktrees and session branch already
+exist (Phase 3 created them when the agent declared each repo); this only pushes
+and opens.
 
 **Files**
 - `~ packages/main/src/session/SessionRuntime.ts` (or a `PrCoordinator`) to push + open
-- `~ packages/core/src/ipc.ts` (`session:openPR`)
+- `~ packages/core/src/ipc.ts` (`session:openPR` → returns the opened PRs)
 - `+ packages/main/src/git/push.ts` (git push helper)
-- `~ packages/renderer/src/shell/...` (wire an "Open PR" affordance in the Overview rail)
+- `~ packages/renderer/src/shell/...` (wire one "Open PR" affordance in the Overview rail)
 
 **Steps**
-1. `git push` the worktree branch to origin (token-authenticated remote URL or
-   `gh`); then `forge.openDraftPR`. Persist `linkedPRs` and emit a `pr` activity.
-2. Support multiple repos: open one PR per workspace; record cross-PR ordering
-   notes if a setting flags dependencies (R-MULTI-3 is informational for now).
+1. For each materialized `Workspace` where `git.hasChanges` is true: `git push`
+   its session branch to origin (token-authenticated remote URL or `gh`); then
+   `forge.openDraftPR`. Append each to `linkedPRs` and emit a `pr` activity item.
+2. Skip repos with no changes; if none had changes, surface "nothing to open a PR
+   for yet". Cross-PR ordering for dependent repos is informational (R-MULTI-3) —
+   record as activity, don't try to order merges.
 
-**Acceptance** — clicking "Open PR" pushes the branch and creates a draft PR
-visible on GitHub; the PR appears in the Overview rail.
+**Acceptance** — for a session that edited two repos, "Open PR" opens two draft
+PRs visible on GitHub and listed together under the session in the Overview rail;
+a one-repo session opens exactly one.
 
-**Validate** — `npm start` against a throwaway GitHub repo: run a task, open a PR,
-confirm on GitHub and in the rail.
+**Validate** — `npm start` against throwaway GitHub repo(s): run a one-repo task,
+open a PR, confirm on GitHub and in the rail; then a two-repo task, confirm two
+PRs under one session.
 
 ---
 
@@ -1342,20 +1392,26 @@ without leaving the app. ForgeService is swappable for other forges.
 Goal: the differentiator — LLM-synthesized summaries, next steps, and context
 inheritance.
 
-> **Model defaults (per `claude-api` skill):** use `claude-opus-4-8` unless the
-> user picks otherwise; adaptive thinking; **stream** any potentially long call.
-> Keep the LLM behind `IntelligenceProvider` so the model/provider is swappable.
+> **Provider = opencode.** The intelligence layer drives the **same opencode
+> backend as the agent harness** (Phase 2 / Workstream A) rather than calling a
+> model SDK directly. This keeps one place to configure providers/models/keys
+> (opencode's own provider config) and one process supervisor. The model id comes
+> from Settings `defaultModel` (an opencode `provider/model` string); **stream**
+> any potentially long call. Keep it behind `IntelligenceProvider` so a direct-SDK
+> impl (`AnthropicIntelligence`, etc.) remains a drop-in swap later.
 
 ---
 
-## M5.1 — `IntelligenceProvider` interface + `AnthropicIntelligence`
+## M5.1 — `IntelligenceProvider` interface + `OpencodeIntelligence`
 
-**Goal.** Abstract LLM synthesis; implement with the Anthropic SDK (streaming).
+**Goal.** Abstract LLM synthesis; implement it by driving **opencode** (the same
+backend as the agent harness), not a direct model SDK.
 
 **Files**
 - `+ packages/core/src/intelligence.ts` (interface + result types)
-- `+ packages/main/src/intelligence/AnthropicIntelligence.ts`
-- `~ packages/main/package.json` (add `@anthropic-ai/sdk`)
+- `+ packages/main/src/intelligence/OpencodeIntelligence.ts`
+- `~ packages/main/src/harness/opencode/server.ts` (reuse the opencode
+  server/SDK client from Workstream A; no new process supervisor)
 
 **Steps**
 1. Interface:
@@ -1378,34 +1434,43 @@ inheritance.
      summarizeReference(input: { title: string; url?: string; body?: string }): Promise<string>;
    }
    ```
-2. `AnthropicIntelligence` — Node `@anthropic-ai/sdk`, default model
-   `claude-opus-4-8`, adaptive thinking, **streaming** via `messages.stream` and
-   `.finalMessage()`:
+2. `OpencodeIntelligence` — synthesize via opencode, **not** a model SDK. Run a
+   **tool-less, one-shot** opencode prompt (so it can't touch the filesystem):
+   either drive a transient opencode session through the server/SDK helper from
+   Workstream A (preferred — shares config + supervision), or shell out to
+   `opencode run --model <provider/model> <prompt>` as a fallback. Assemble the
+   project bundle (M5.2) into the prompt; **stream** the response and read the
+   final assistant text.
    ```ts
-   import Anthropic from "@anthropic-ai/sdk";
-   const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env/settings
-   const stream = client.messages.stream({
-     model: opts.model ?? "claude-opus-4-8",
-     max_tokens: 2000,
-     thinking: { type: "adaptive" },
-     system: SYSTEM_PROMPT,        // "You write sharp engineering status updates…"
-     messages: [{ role: "user", content: assembledContext }],
+   // Sketch — exact client surface is pinned in harness/opencode/SPIKE.md.
+   const model = opts.model ?? settings.defaultModel; // "provider/model"
+   const text = await runOpencodePrompt({
+     model,
+     system: SYSTEM_PROMPT,       // "You write sharp engineering status updates…"
+     prompt: assembledContext,
+     tools: false,                // synthesis only — no file/edit tools
    });
-   const msg = await stream.finalMessage();
+   // Instruct the model to emit strict JSON {summary, nextSteps[]} and parse it;
+   // tolerate fenced code blocks and a leading/trailing prose guard.
    ```
-   Parse `summary` + `nextSteps` from the response. Prefer structured output
-   (`output_config.format` with a small JSON schema: `{summary, nextSteps[]}`) so
-   parsing is robust. Use SDK types; handle typed errors
-   (`Anthropic.RateLimitError`, `Anthropic.APIError`); the SDK retries 429/5xx.
-3. API key comes from Settings (M2.8) or `ANTHROPIC_API_KEY`. Never log it.
+   Robust parsing: request strict JSON `{ summary, nextSteps[] }` in the system
+   prompt, extract the first JSON object, and fall back to a best-effort
+   split if parsing fails. Map opencode/process errors to a typed
+   `IntelligenceError`.
+3. Models/providers/keys are configured **in opencode** (`opencode providers`);
+   the layer only passes a `provider/model` id from Settings `defaultModel`. No
+   separate Anthropic key in this impl. Never log provider credentials.
 
-**Acceptance** — given a project bundle, returns a coherent summary + steps.
+**Acceptance** — given a project bundle, returns a coherent summary + steps via
+opencode.
 
-**Validate** — `npm --workspace @app/main run test` with a real key behind an env
-guard (skip if absent), asserting non-empty `summary`/`nextSteps`.
+**Validate** — `npm --workspace @app/main run test`: guard on opencode being
+present + a provider configured (skip otherwise), asserting non-empty
+`summary`/`nextSteps`.
 
-**Notes** — Keep the provider thin; routing through it (not raw SDK calls) is what
-keeps the intelligence layer swappable.
+**Notes** — Keep the provider thin; routing through `IntelligenceProvider` (not
+opencode calls scattered around) is what keeps a future direct-SDK
+`AnthropicIntelligence` a one-file swap.
 
 ---
 
@@ -1600,8 +1665,9 @@ provider/API tokens, GitHub token, repo roots, intelligence toggles.
 - `~ packages/main/src/settings/Settings.ts` (all keys)
 
 **Steps**
-1. Group settings; mask secrets; "Test connection" for harness, Anthropic, and
-   GitHub. Persist via Repository/settings file.
+1. Group settings; mask secrets; "Test connection" for the harness/opencode (also
+   covers intelligence, since both use opencode) and GitHub. Persist via
+   Repository/settings file.
 
 **Acceptance** — all integration credentials/config live in one place and persist.
 
@@ -1629,7 +1695,8 @@ repos, offline GitHub, stream drop.
 
 **Steps**
 1. Map known failures to actionable messages ("opencode not found — set its path
-   in Settings", "ANTHROPIC_API_KEY missing", "GitHub token lacks `repo` scope").
+   in Settings", "opencode has no provider configured — run `opencode providers`",
+   "GitHub token lacks `repo` scope").
 2. On reconnect/resubscribe, refetch the session transcript/PR state and dedupe so
    no events are lost across a drop.
 
@@ -1743,9 +1810,12 @@ scale. The app is "complete" per `docs/product-description.md`.
   keys are configured. Record in `SPIKE.md` and pin the version.
 - **GitHub auth (M4.1):** PAT scopes vs `gh` CLI token; org SSO; draft-PR
   permissions.
-- **Anthropic (M5.1):** confirm structured-output schema support for
-  `{summary, nextSteps[]}`; choose `max_tokens`/effort per cost target. Default
-  model `claude-opus-4-8`.
+- **Intelligence via opencode (M5.1):** confirm the one-shot/tool-less prompt
+  path (transient session through the Workstream A server/SDK helper vs.
+  `opencode run`); how to disable tools for pure synthesis; how reliably the
+  chosen model returns strict `{summary, nextSteps[]}` JSON. Record in
+  `harness/opencode/SPIKE.md`. The model id is a `provider/model` string from
+  Settings; provider keys live in opencode's own config.
 - **SQLite (M7.2):** electron-builder native-module unpacking/rebuild for the
   target platforms.
 
