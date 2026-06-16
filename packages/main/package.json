@@ -16,6 +16,7 @@
     "@app/core": "*",
     "@app/preload": "*",
     "@app/renderer": "*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@octokit/rest": "^21.1.0",
     "electron-store": "^8.2.0",
     "electron-updater": "6.8.3"
