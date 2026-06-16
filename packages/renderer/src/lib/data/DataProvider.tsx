@@ -119,11 +119,26 @@ export function DataProvider({
   }, [activeSource]);
 
   // M3.2 — subscribe to data:changed push events from main process
+  // M6.2 — subscribe to session-status-changed for optimistic local updates
   useEffect(() => {
-    const handler = (_event: unknown) => {
+    const onDataChanged = (_event: unknown) => {
       loadData();
     };
-    return on("data:changed", handler);
+
+    const onStatusChanged = (payload: unknown) => {
+      const evt = payload as { sessionId: string; status: SessionStatus };
+      // Optimistic local update — triggers re-render immediately without full reload
+      setStandaloneSessions((prev) =>
+        prev.map((s) => (s.id === evt.sessionId ? { ...s, status: evt.status } : s))
+      );
+    };
+
+    const unsubData = on("data:changed", onDataChanged);
+    const unsubStatus = on("session-status-changed", onStatusChanged);
+    return () => {
+      unsubData();
+      unsubStatus();
+    };
   }, [loadData]);
 
   const value: DataContextValue = {

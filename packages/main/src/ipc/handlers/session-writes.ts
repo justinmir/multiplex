@@ -1,14 +1,17 @@
 import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { JsonRepository } from "../../repo/JsonRepository.js";
-import type { ActivityItem, Session } from "@app/core";
+import type { ActivityItem, Session, SessionStatus } from "@app/core";
 import { deriveSessionStatus } from "../../session/deriveStatus.js";
 
 /** Apply derived status after a session upsert; patch + re-upsert if it changed. */
 async function applyDerived(repo: JsonRepository, updated: Session, projectId: string | null) {
   const derived = deriveSessionStatus(updated);
   if (derived !== updated.status) {
-    return repo.upsertSession({ ...updated, status: derived }, projectId);
+    const patched = await repo.upsertSession({ ...updated, status: derived }, projectId);
+    // M6.2 — emit granular status event for targeted renderer updates
+    emit("session-status-changed", { sessionId: patched.id, status: derived });
+    return patched;
   }
   return updated;
 }
@@ -50,6 +53,8 @@ export function registerSessionWriteHandlers(repo: JsonRepository) {
     const derived = deriveSessionStatus(session);
     if (derived !== session.status) {
       session = await repo.upsertSession({ ...session, status: derived }, projectId);
+      // M6.2 — emit granular status event for targeted renderer updates
+      emit("session-status-changed", { sessionId: session.id, status: derived });
     }
 
     emit("data:changed", { kind: "session" });
