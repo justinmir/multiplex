@@ -20,7 +20,7 @@
     "@octokit/rest": "^21.1.0",
     "better-sqlite3": "^11.10.0",
     "electron-store": "^8.2.0",
-    "electron-updater": "6.8.3"
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "@app/electron-versions": "*",
