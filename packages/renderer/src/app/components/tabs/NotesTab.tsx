@@ -57,6 +57,8 @@ export function NotesTab({ project, focusedId, onFocus }: Props) {
 
   // ---- Editor (center panel) ----
   if (focused) {
+    const draftTags = draft.tags.split(",").map((t) => t.trim()).filter(Boolean);
+    const dirty = draft.title !== focused.title || draft.body !== focused.body || draftTags.join(",") !== focused.tags.join(",");
     return (
       <div className="mx-auto flex h-full max-w-4xl flex-col">
         <div className="mb-3 flex items-center gap-2">
@@ -72,6 +74,7 @@ export function NotesTab({ project, focusedId, onFocus }: Props) {
             placeholder="Untitled note"
             className="min-w-0 flex-1 bg-transparent text-[15px] font-medium text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
           />
+          <span className="font-mono text-[10.5px] text-muted-foreground">{dirty ? "Saving…" : "Saved"}</span>
           <button
             onClick={() => setMode((m) => (m === "edit" ? "preview" : "edit"))}
             className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
