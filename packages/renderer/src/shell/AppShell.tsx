@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ProjectsSidebar } from "../app/components/ProjectsSidebar";
 import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
-import { TaskView } from "../app/components/TaskView";
+import { LiveSession } from "../app/components/LiveSession";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
@@ -10,11 +10,8 @@ import { AnalyticsView } from "../app/components/AnalyticsView";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "../app/components/ui/resizable";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
-import { useSessionStream } from "../lib/session/useSessionStream.js";
 import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
-import { useChanges } from "../lib/session/useChanges.js";
-import { usePrDetails } from "../lib/pr/usePr.js";
-import type { Session, Reference, SessionMsg, AppSettingsData } from "@app/core";
+import type { Session, AppSettingsData } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 import { call } from "../lib/ipc/client.js";
 
@@ -153,28 +150,6 @@ export function AppShell() {
     if (archived) mutations.archiveSession(id);
   };
 
-  const addReferenceToSession = async (sessionId: string, ref: Reference) => {
-    await mutations.upsertSessionReference(sessionId, ref);
-  };
-
-  // M3.4 — agent workflow foundation handlers (M-A5 runtime). The runtime
-  // decides whether to run the message now or queue it (single-threaded turns),
-  // so the renderer just forwards it.
-  const sendMessageToSession = async (messageText: string) => {
-    if (!session) return;
-    await mutations.sendToSession(session.id, messageText);
-  };
-
-  const stopSessionAgent = async () => {
-    if (!session) return;
-    await mutations.stopSessionViaRuntime(session.id);
-  };
-
-  const editPromptInSession = (newText: string) => {
-    if (!session) return;
-    mutations.editSessionPrompt(session.id, newText);
-  };
-
   const createSession = async (prompt: string) => {
     try {
       const { sessionId } = await mutations.startSession({ prompt });
@@ -194,74 +169,8 @@ export function AppShell() {
     }
   };
 
-  // Resolve PRs for the current standalone session against any project that hosts a matching repo
+  // The active standalone session (its full live view is owned by LiveSession).
   const session = sessions.find((s) => s.id === selectedSessionId) ?? null;
-  const sessionPRs = session?.linkedPRs ?? [];
-
-  // M-A5 — Subscribe to live harness events for the active session and build an
-  // ordered, in-flight "turn" of steps (thinking → tool calls → streaming reply)
-  // shown below the persisted transcript until the turn is flushed to the store.
-  const [liveSteps, setLiveSteps] = useState<SessionMsg[]>([]);
-
-  // Reset the live turn when switching sessions.
-  useEffect(() => {
-    setLiveSteps([]);
-  }, [selectedSessionId]);
-
-  useSessionStream(session?.id ?? null, (event) => {
-    setLiveSteps((prev) => {
-      const next = [...prev];
-      const last = next[next.length - 1];
-      switch (event.type) {
-        case "message_delta":
-          if (last?.role === "agent") next[next.length - 1] = { ...last, content: last.content + event.delta };
-          else next.push({ role: "agent", content: event.delta, ts: new Date().toISOString() });
-          return next;
-        case "reasoning_delta":
-          if (last?.role === "thinking") next[next.length - 1] = { ...last, content: last.content + event.delta };
-          else next.push({ role: "thinking", content: event.delta, ts: new Date().toISOString() });
-          return next;
-        case "tool_use":
-          next.push({ role: "tool", content: "", ts: new Date().toISOString(), tool: { name: event.name, input: event.input, callId: event.id, status: "running" } });
-          return next;
-        case "tool_result": {
-          const idx = next.findIndex((m) => m.tool?.callId === event.id);
-          if (idx < 0) return prev;
-          const m = next[idx];
-          next[idx] = { ...m, content: event.content, tool: { ...m.tool!, status: event.isError ? "error" : "ok" } };
-          return next;
-        }
-        default:
-          return prev;
-      }
-    });
-    // We deliberately do NOT clear on "message"/"done"; the live turn is cleared
-    // (below) only once the persisted transcript has caught up, so steps don't
-    // flicker in the gap between the event and the data reload.
-  });
-
-  // Once the persisted session ends with an agent message, the turn's output is
-  // safely in `session.messages`; drop the live steps so we don't show them twice.
-  const lastPersisted = session?.messages[session.messages.length - 1];
-  const persistedEndsWithAgent = lastPersisted?.role === "agent";
-  useEffect(() => {
-    if (persistedEndsWithAgent && liveSteps.length > 0) {
-      setLiveSteps([]);
-    }
-  }, [persistedEndsWithAgent, liveSteps.length]);
-
-  // M-C4 — live working-tree diffs for the active standalone session.
-  const { changes: worktreeChanges } = useChanges(session?.id ?? null, view === "session");
-  // M-B3 — enrich the session's linked PRs with live GitHub detail. Skip the
-  // live fetch when GitHub isn't connected — there's nothing to fetch, and the
-  // stored linked PRs already render fine on their own.
-  const enrichedPRs = usePrDetails(sessionPRs, view === "session" && mutations.githubConnected);
-
-  // Show the live turn only while the agent's reply hasn't been persisted yet,
-  // so the live stream transitions seamlessly into the saved transcript.
-  const visibleLiveSteps = !!session && !persistedEndsWithAgent ? liveSteps : [];
-  // The queue is owned by the runtime and persisted on the session.
-  const sessionQueue = session?.queuedMessages ?? [];
 
   // Determine if we're inside a project session view (for sidebar highlight)
   const selectedProjectSessionId = view === "project" ? projectInitialSession : null;
@@ -309,28 +218,7 @@ export function AppShell() {
           <ProjectView key={`${project.id}:${projectInitialSession ?? ""}`} project={project} initialSessionId={projectInitialSession} onSync={() => mutations.syncProject(selectedProjectId)} isSyncing={isSyncing} onCreateProjectSession={(prompt) => handleCreateProjectSession(prompt, selectedProjectId)} />
         )}
         {view === "session" && session && (
-          <TaskView
-            key={session.id}
-            session={session}
-            liveSteps={visibleLiveSteps}
-            queuedMessages={sessionQueue}
-            onInterruptQueued={(i) => session && mutations.interruptQueuedMessage(session.id, i)}
-            onDeleteQueued={(i) => session && mutations.removeQueuedMessage(session.id, i)}
-            onEditPrompt={editPromptInSession}
-            prs={enrichedPRs}
-            worktreeChanges={worktreeChanges}
-            currentModel={settings?.defaultModel}
-            availableModels={harnessInfo.models ?? []}
-            onSelectModel={handleSelectModel}
-            onAddReference={(r) => addReferenceToSession(session.id, r)}
-            onSendMessage={sendMessageToSession}
-            onStopAgent={stopSessionAgent}
-            onReplyToComment={(repo, number, commentId, body) => mutations.replyToComment(repo, number, commentId, body)}
-            onRerunChecks={(repo, number) => mutations.rerunChecks(repo, number)}
-            onAddressComments={(comments) => mutations.addressComments(session.id, comments)}
-            onOpenPR={() => mutations.openSessionPR(session.id)}
-            onClose={() => setView("home")}
-          />
+          <LiveSession key={session.id} session={session} onClose={() => setView("home")} />
         )}
         {view === "new-session" && (
           <NewSessionView

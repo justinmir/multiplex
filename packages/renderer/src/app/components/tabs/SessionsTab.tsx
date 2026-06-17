@@ -2,8 +2,8 @@ import { Plus, Terminal, ChevronRight, GitPullRequest } from "lucide-react";
 import { Project } from "../../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo, sessionWeight } from "../SessionStateBadge";
 import { SessionDetail } from "../SessionDetail";
+import { LiveSession } from "../LiveSession";
 import { formatRelativeTime } from "../../../lib/format/time.js";
-import { useDataMutations } from "../../../lib/data/DataProvider.js";
 
 interface Props {
   project: Project;
@@ -14,7 +14,6 @@ interface Props {
 }
 
 export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) {
-  const mutations = useDataMutations();
   const close = () => onOpen(null);
 
   if (openId === "new") {
@@ -33,16 +32,11 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
 
   const session = openId ? project.sessions.find((s) => s.id === openId) : null;
   if (session) {
-    const prs = session.linkedPRs ?? [];
     return (
-      <SessionDetail
+      <LiveSession
         projectName={project.name}
         backLabel="All sessions"
         session={session}
-        prs={prs}
-        references={session.references ?? []}
-        onAddReference={(r) => mutations.upsertSessionReference(session.id, r)}
-        onStopAgent={() => mutations.stopSessionViaRuntime(session.id)}
         onClose={close}
       />
     );
