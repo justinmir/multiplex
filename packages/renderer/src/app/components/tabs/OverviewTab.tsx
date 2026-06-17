@@ -243,7 +243,7 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
           <h3 className="text-foreground">Recent activity</h3>
         </div>
         <ul>
-          {project.activity.map((a) => {
+          {[...project.activity].reverse().map((a) => {
             const Icon = iconFor(a.kind);
             return (
               <li key={a.id} className="group flex items-center gap-3 border-b border-border/60 px-5 py-2.5 last:border-b-0 hover:bg-secondary/40">
