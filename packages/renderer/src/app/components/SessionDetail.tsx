@@ -5,7 +5,7 @@ import {
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder,
 } from "lucide-react";
-import { Session, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
+import { Session, SessionMsg, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { ReferenceRow } from "./tabs/ReferencesTab";
@@ -17,6 +17,8 @@ interface Props {
   /** Breadcrumb label for the back button (e.g. "All sessions", "Home") */
   backLabel?: string;
   session: Session | null;
+  /** Ordered steps of the in-flight turn (thinking, tool calls, streaming reply). */
+  liveSteps?: SessionMsg[];
   prs?: PullRequest[];
   references?: Reference[];
   onAddReference?: (r: Reference) => void;
@@ -44,7 +46,7 @@ interface Props {
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 
 export function SessionDetail({
-  projectName, backLabel = "Back", session, prs = [], references = [],
+  projectName, backLabel = "Back", session, liveSteps = [], prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
   onReplyToComment, onRerunChecks, onAddressComments, onOpenPR,
@@ -153,7 +155,13 @@ export function SessionDetail({
             {!session ? (
               <NewSessionPane projectName={projectName} starterPrompts={starterPrompts} draft={draft} setDraft={setDraft} />
             ) : (
-              <ConversationPane session={session} />
+              <ConversationPane
+                session={session}
+                liveSteps={liveSteps}
+                changeFiles={allFiles}
+                totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)}
+                totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)}
+              />
             )}
           </div>
           <Composer
@@ -418,7 +426,29 @@ function CheckSummary({ pr }: { pr: PullRequest }) {
 
 /* ---------- Conversation ---------- */
 
-function ConversationPane({ session }: { session: Session }) {
+function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDels }: {
+  session: Session;
+  liveSteps: SessionMsg[];
+  changeFiles: FileWithMeta[];
+  totalAdds: number;
+  totalDels: number;
+}) {
+  // Persisted transcript + the in-flight turn's live steps, in order.
+  const all = [...session.messages, ...liveSteps];
+  // Collapse consecutive thinking/tool steps into one darkened "agent steps" rail,
+  // so the transcript reads like other agentic chats.
+  const groups: Array<{ kind: "msg"; msg: SessionMsg } | { kind: "steps"; items: SessionMsg[] }> = [];
+  for (const m of all) {
+    if (m.role === "thinking" || m.role === "tool") {
+      const last = groups[groups.length - 1];
+      if (last && last.kind === "steps") last.items.push(m);
+      else groups.push({ kind: "steps", items: [m] });
+    } else {
+      groups.push({ kind: "msg", msg: m });
+    }
+  }
+  const running = session.status === "running";
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-6 py-8">
       {session.prompt && (
@@ -427,31 +457,27 @@ function ConversationPane({ session }: { session: Session }) {
           <p className="text-[13px] text-foreground">{session.prompt}</p>
         </div>
       )}
-      {session.messages.map((m, i) => (
-        <Message key={i} role={m.role} content={m.content} ts={m.ts} />
-      ))}
-      {session.status === "running" && (
+      {groups.map((g, i) =>
+        g.kind === "msg"
+          ? <Message key={i} role={g.msg.role} content={g.msg.content} ts={g.msg.ts} />
+          : <StepGroup key={i} steps={g.items} />
+      )}
+      {running && (
         <div className="flex items-center gap-2 pl-9 font-mono text-[11px] text-muted-foreground">
           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-          agent is thinking…
+          {liveSteps.length > 0 ? "working…" : "agent is thinking…"}
         </div>
+      )}
+      {changeFiles.length > 0 && (
+        <TurnChangesCard files={changeFiles} totalAdds={totalAdds} totalDels={totalDels} />
       )}
     </div>
   );
 }
 
-function Message({ role, content, ts }: { role: "user" | "agent" | "tool"; content: string; ts: string }) {
-  if (role === "tool") {
-    return (
-      <div className="rounded-md border border-border bg-secondary/40 px-3.5 py-2.5">
-        <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          <Wrench className="h-3 w-3" /> tool output
-          <span className="ml-auto normal-case tracking-normal">{formatRelativeTime(ts)}</span>
-        </div>
-        <pre className="whitespace-pre-wrap font-mono text-[12px] text-foreground/80">{content}</pre>
-      </div>
-    );
-  }
+function Message({ role, content, ts }: { role: SessionMsg["role"]; content: string; ts: string }) {
+  // Thinking + tool steps render via StepGroup; Message handles user/agent text.
+  if (role === "thinking" || role === "tool") return null;
   const meta = role === "user"
     ? { Icon: User, label: "you", tone: "bg-secondary text-foreground" }
     : { Icon: Bot, label: "agent", tone: "bg-secondary text-foreground" };
@@ -467,8 +493,102 @@ function Message({ role, content, ts }: { role: "user" | "agent" | "tool"; conte
           <span className="text-muted-foreground/40">·</span>
           <span>{formatRelativeTime(ts)}</span>
         </div>
-        <p className="text-[13.5px] leading-relaxed text-foreground">{content}</p>
+        <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">{content}</p>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Agent steps (thinking + tool calls) ---------- */
+
+/** A vertical rail of darkened, smaller "thinking" + tool-call steps. */
+function StepGroup({ steps }: { steps: SessionMsg[] }) {
+  return (
+    <div className="ml-3 space-y-1 border-l border-border/60 pl-3.5">
+      {steps.map((s, i) =>
+        s.role === "thinking"
+          ? <ThinkingStep key={i} content={s.content} />
+          : <ToolStep key={i} step={s} />,
+      )}
+    </div>
+  );
+}
+
+function ThinkingStep({ content }: { content: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="py-0.5">
+      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground/70 hover:text-muted-foreground">
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <Sparkles className="h-3 w-3" />
+        <span className="font-mono uppercase tracking-[0.1em]">thinking</span>
+      </button>
+      {open && (
+        <p className="ml-[1.125rem] mt-0.5 whitespace-pre-wrap text-[12px] italic leading-relaxed text-muted-foreground/60">{content}</p>
+      )}
+    </div>
+  );
+}
+
+function ToolStep({ step }: { step: SessionMsg }) {
+  const [open, setOpen] = useState(false);
+  const status = step.tool?.status ?? "ok";
+  const dot = status === "error" ? "bg-destructive" : status === "running" ? "bg-amber-400 animate-pulse" : "bg-[var(--success)]";
+  const args = toolArgSummary(step.tool?.input);
+  const hasResult = step.content.trim().length > 0;
+  return (
+    <div className="py-0.5">
+      <button
+        onClick={() => hasResult && setOpen((v) => !v)}
+        className={`flex w-full items-center gap-1.5 text-left text-[12px] text-muted-foreground/80 ${hasResult ? "hover:text-muted-foreground" : "cursor-default"}`}
+      >
+        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+        <Wrench className="h-3 w-3 shrink-0" />
+        <span className="font-mono text-foreground/70">{step.tool?.name ?? "tool"}</span>
+        {args && <span className="truncate font-mono text-muted-foreground/60">{args}</span>}
+        {hasResult && (open ? <ChevronDown className="ml-auto h-3 w-3 shrink-0" /> : <ChevronRight className="ml-auto h-3 w-3 shrink-0" />)}
+      </button>
+      {open && hasResult && (
+        <pre className="ml-[1.125rem] mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border/60 bg-background/40 px-2.5 py-1.5 font-mono text-[11px] leading-[1.5] text-muted-foreground/80">{step.content}</pre>
+      )}
+    </div>
+  );
+}
+
+/** One-line summary of a tool call's input for the step header. */
+function toolArgSummary(input: unknown): string {
+  if (input == null) return "";
+  if (typeof input === "object") {
+    const o = input as Record<string, unknown>;
+    const v = o.path ?? o.repo ?? o.file ?? o.filePath ?? o.command ?? o.query ?? o.pattern;
+    if (typeof v === "string") return v;
+    try { const s = JSON.stringify(o); return s.length > 64 ? `${s.slice(0, 61)}…` : s; } catch { return ""; }
+  }
+  return String(input);
+}
+
+/* ---------- End-of-turn changes card ---------- */
+
+/** Codex-style "N files changed" card anchored at the end of the conversation;
+ *  each file expands to its diff in place (reuses FileCard). */
+function TurnChangesCard({ files, totalAdds, totalDels }: { files: FileWithMeta[]; totalAdds: number; totalDels: number }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left hover:bg-secondary/30">
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-[12.5px] text-foreground">{files.length} file{files.length === 1 ? "" : "s"} changed</span>
+        <span className="ml-auto font-mono text-[11px]">
+          <span className="text-[var(--success)]">+{totalAdds}</span>{" "}
+          <span className="text-destructive">−{totalDels}</span>
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-1.5 border-t border-border/60 px-3 py-2.5">
+          {files.map((f) => <FileCard key={`${f._repo}:${f.path}`} file={f} />)}
+        </div>
+      )}
     </div>
   );
 }

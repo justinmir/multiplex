@@ -70,6 +70,31 @@ test("mock session: follow-up message is appended and answered", async () => {
   rt.disposeAll();
 });
 
+test("mock session: thinking + tool steps are persisted in order", async () => {
+  const repo = new InMemoryRepository();
+  const rt = makeRuntime(repo);
+
+  const { sessionId } = await rt.startSession({ prompt: "do the thing" });
+  const s = await waitForStatus(repo, sessionId, "completed");
+  const roles = s!.messages.map((m) => m.role);
+
+  // A thinking block, the tool call, and the agent reply all survive the turn.
+  const thinkingIdx = roles.indexOf("thinking");
+  const toolIdx = roles.indexOf("tool");
+  const agentIdx = roles.lastIndexOf("agent");
+  assert.ok(thinkingIdx >= 0, "a thinking message is persisted");
+  assert.ok(toolIdx >= 0, "a tool message is persisted");
+  assert.ok(agentIdx >= 0, "an agent message is persisted");
+  assert.ok(thinkingIdx < toolIdx && toolIdx < agentIdx, "ordered thinking → tool → agent");
+
+  const toolMsg = s!.messages[toolIdx];
+  assert.equal(toolMsg.tool?.name, "read_file", "tool call carries its name");
+  assert.equal(toolMsg.tool?.status, "ok", "tool result marked ok");
+  assert.ok(toolMsg.content.trim().length > 0, "tool result content captured");
+
+  rt.disposeAll();
+});
+
 test("session persists across a fresh runtime (simulated restart)", async () => {
   const repo = new InMemoryRepository();
   const rt1 = makeRuntime(repo);

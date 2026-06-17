@@ -114,6 +114,17 @@ export class MockHarness implements Harness {
     emit(50, { type: "status", status: "starting" });
     emit(120, { type: "status", status: "running" });
 
+    // Phase 1a: stream a short "thinking" block (reasoning) before acting, so the
+    // transcript exercises the thinking UI.
+    const REASONING = [
+      "Let me look at the repo layout first. ",
+      "I'll open the repo, read the entry point, ",
+      "then make a small edit and summarize.",
+    ];
+    for (let i = 0; i < REASONING.length; i++) {
+      emit(125 + i * 8, { type: "reasoning_delta", delta: REASONING[i] });
+    }
+
     // Phase 1b: declare the first available repo via the open_repo host tool,
     // then simulate an edit in the materialized worktree (exercises Workstream C).
     const openRepo = input.tools?.find((t) => t.name === "open_repo");

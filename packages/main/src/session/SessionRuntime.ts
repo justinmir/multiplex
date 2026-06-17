@@ -44,6 +44,13 @@ export class SessionRuntime {
   /** Per-session promise chain that serializes repo read-modify-write so
    *  concurrently-arriving harness events can't clobber each other's writes. */
   private persistChains = new Map<string, Promise<void>>();
+  /** Per-session buffer of the in-flight turn's steps (thinking, tool calls, the
+   *  final agent message). Flushed to session.messages in order when the turn
+   *  completes so the agentic transcript is persisted as one ordered batch. */
+  private pendingTurn = new Map<string, SessionMsg[]>();
+  /** Per-session accumulator for the current thinking block (reasoning deltas)
+   *  not yet committed to `pendingTurn`. */
+  private pendingThinking = new Map<string, string>();
 
   private workspaces?: WorkspaceManager;
   private forge?: ForgeService;
@@ -286,6 +293,7 @@ export class SessionRuntime {
     harness: Harness,
     input: { sessionId: string; prompt: string; model?: string; cwd: string; availableRepos?: string[]; tools?: HostTool[]; notes?: { title: string; body: string }[]; references?: { title: string; url?: string; body?: string }[] },
   ): Promise<void> {
+    this.resetTurnBuffer(input.sessionId);
     const run = await harness.start(
       {
         sessionId: input.sessionId,
@@ -323,6 +331,7 @@ export class SessionRuntime {
 
     const run = this.runs.get(sessionId);
     if (run) {
+      this.resetTurnBuffer(sessionId);
       await run.send(text);
       this.lastActivity.set(sessionId, Date.now());
       return;
@@ -505,6 +514,22 @@ export class SessionRuntime {
     this.persistChains.set(sessionId, next);
   }
 
+  /** Drop any buffered in-flight-turn steps for a session (start/end of a turn). */
+  private resetTurnBuffer(sessionId: string): void {
+    this.pendingTurn.delete(sessionId);
+    this.pendingThinking.delete(sessionId);
+  }
+
+  /** Commit the accumulated reasoning block (if any) as a thinking message. */
+  private flushThinking(sessionId: string): void {
+    const text = (this.pendingThinking.get(sessionId) ?? "").trim();
+    this.pendingThinking.delete(sessionId);
+    if (!text) return;
+    const buf = this.pendingTurn.get(sessionId) ?? [];
+    buf.push({ role: "thinking", content: text, ts: new Date().toISOString() });
+    this.pendingTurn.set(sessionId, buf);
+  }
+
   /** Apply one harness event to the persisted session (runs inside the queue). */
   private async persistEvent(sessionId: string, event: HarnessEvent): Promise<void> {
     const existing = await this.repo.getSession(sessionId);
@@ -526,15 +551,43 @@ export class SessionRuntime {
       // Live streaming is rendered by the renderer overlay from the raw event;
       // per-delta persistence is intentionally skipped (one DB write per token).
       case "message_delta":
-      case "tool_use":
         break;
 
+      // Thinking + tool calls are buffered for the in-flight turn and flushed to
+      // the persisted transcript in order when the turn completes (see "done").
+      case "reasoning_delta": {
+        this.pendingThinking.set(sessionId, (this.pendingThinking.get(sessionId) ?? "") + event.delta);
+        break;
+      }
+
+      case "tool_use": {
+        this.flushThinking(sessionId);
+        const buf = this.pendingTurn.get(sessionId) ?? [];
+        buf.push({
+          role: "tool",
+          content: "",
+          ts: new Date().toISOString(),
+          tool: { name: event.name, input: event.input, callId: event.id, status: "running" },
+        });
+        this.pendingTurn.set(sessionId, buf);
+        break;
+      }
+
+      case "tool_result": {
+        const msg = this.pendingTurn.get(sessionId)?.find((m) => m.tool?.callId === event.id);
+        if (msg?.tool) {
+          msg.content = event.content;
+          msg.tool.status = event.isError ? "error" : "ok";
+        }
+        break;
+      }
+
       case "message": {
-        updated.messages = [
-          ...updated.messages,
-          { role: event.role, content: event.content, ts: new Date().toISOString() },
-        ];
-        persist = true;
+        // Buffer the final agent text; flushed (after thinking/tools) on "done".
+        this.flushThinking(sessionId);
+        const buf = this.pendingTurn.get(sessionId) ?? [];
+        buf.push({ role: event.role, content: event.content, ts: new Date().toISOString() });
+        this.pendingTurn.set(sessionId, buf);
         break;
       }
 
@@ -547,6 +600,15 @@ export class SessionRuntime {
       }
 
       case "done": {
+        // Flush the in-flight turn's buffered steps (thinking → tools → agent
+        // reply) into the persisted transcript as one ordered batch.
+        this.flushThinking(sessionId);
+        const buf = this.pendingTurn.get(sessionId);
+        if (buf && buf.length > 0) {
+          updated.messages = [...updated.messages, ...buf];
+          persist = true;
+        }
+        this.resetTurnBuffer(sessionId);
         const newStatus = deriveSessionStatusFromEvent(event);
         if (newStatus) {
           updated.status = newStatus;
@@ -562,10 +624,12 @@ export class SessionRuntime {
       }
 
       case "error": {
-        updated.messages = [
-          ...updated.messages,
-          { role: "agent", content: `[Error] ${event.message}`, ts: new Date().toISOString() },
-        ];
+        // Keep any steps that happened before the failure, then the error.
+        this.flushThinking(sessionId);
+        const buf = this.pendingTurn.get(sessionId) ?? [];
+        buf.push({ role: "agent", content: `[Error] ${event.message}`, ts: new Date().toISOString() });
+        updated.messages = [...updated.messages, ...buf];
+        this.resetTurnBuffer(sessionId);
         if (!event.recoverable) updated.status = "failed";
         persist = true;
         break;
