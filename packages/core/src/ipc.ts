@@ -117,6 +117,8 @@ export interface AppSettingsData {
   autoSynthesizeOnActivity: boolean;
   /** Auto-resynthesize each active project this often (minutes). Default 60. */
   synthesisIntervalMinutes?: number;
+  /** Background refresh cadence for open PRs' status (minutes). Default 5. */
+  prPollIntervalMinutes?: number;
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

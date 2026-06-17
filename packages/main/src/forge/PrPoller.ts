@@ -12,7 +12,8 @@ interface CacheEntry {
   fetchedAtMs: number;
 }
 
-const DEFAULT_INTERVAL_MS = 60_000; // background refresh cadence
+const DEFAULT_INTERVAL_MS = 5 * 60_000; // background refresh cadence
+const MIN_INTERVAL_MS = 30_000; // floor so a tiny setting can't hammer GitHub
 const BASE_BACKOFF_MS = 30_000; // first wait after a failed/empty fetch
 const MAX_BACKOFF_MS = 15 * 60_000; // backoff ceiling
 
@@ -31,29 +32,41 @@ export class PrPoller {
   private failures = new Map<string, number>(); // consecutive failures per PR
   private nextAttemptMs = new Map<string, number>(); // earliest next attempt per PR
   private inFlight = new Map<string, Promise<PullRequest | null>>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
 
   constructor(
     private readonly repo: Repository,
     private readonly forge: ForgeService,
     private readonly emit: (topic: string, payload: unknown) => void,
     private readonly isConnected: () => boolean,
-    private readonly intervalMs: number = DEFAULT_INTERVAL_MS,
+    /** Configured cadence (ms). Read each cycle so a settings change takes
+     *  effect on the next tick without a restart. */
+    private readonly getIntervalMs: () => number = () => DEFAULT_INTERVAL_MS,
   ) {}
 
   start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => void this.tick(), this.intervalMs);
-    // Don't keep the process alive solely for polling.
-    this.timer.unref?.();
-    void this.tick();
+    if (this.running) return;
+    this.running = true;
+    // Self-rescheduling (vs. setInterval) so the cadence can change at runtime
+    // and a slow tick never overlaps the next one.
+    void this.tick().finally(() => this.schedule());
   }
 
   stop(): void {
+    this.running = false;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  private schedule(): void {
+    if (!this.running) return;
+    const delay = Math.max(MIN_INTERVAL_MS, this.getIntervalMs());
+    this.timer = setTimeout(() => void this.tick().finally(() => this.schedule()), delay);
+    // Don't keep the process alive solely for polling.
+    this.timer.unref?.();
   }
 
   /** Cached PR detail, or null if it hasn't been fetched yet. No network. */

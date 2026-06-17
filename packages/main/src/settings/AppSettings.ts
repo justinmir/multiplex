@@ -6,6 +6,7 @@ const defaultSettings: AppSettingsData = {
   repoRoots: [],
   intelligenceEnabled: false,
   autoSynthesizeOnActivity: true,
+  prPollIntervalMinutes: 5,
 };
 
 export class AppSettings {

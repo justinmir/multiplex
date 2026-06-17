@@ -108,7 +108,13 @@ export function createIpcModule(): AppModule {
       // blocks on GitHub; pr:get reads the cache and a manual sync forces a
       // refresh. Open, non-merged PRs are refreshed on an interval with
       // per-PR exponential backoff.
-      const prPoller = new PrPoller(repo, githubForge, emit, () => configStore.isGitHubConnected());
+      const prPoller = new PrPoller(
+        repo,
+        githubForge,
+        emit,
+        () => configStore.isGitHubConnected(),
+        () => (settings.get().prPollIntervalMinutes ?? 5) * 60_000,
+      );
       prPoller.start();
       registerPrHandlers(githubForge, runtime, prPoller);
 
