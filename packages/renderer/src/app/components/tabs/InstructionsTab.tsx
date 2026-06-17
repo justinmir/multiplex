@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sparkles, Target } from "lucide-react";
 import type { Project } from "@app/core";
 import { useDataMutations } from "../../../lib/data/DataProvider.js";
+import { AgentInstructionPresetChips } from "../agentInstructionPresets";
 
 interface Props {
   project: Project;
@@ -47,6 +48,11 @@ export function InstructionsTab({ project }: Props) {
           the suggested next steps, and the session prompts — for example,
           <span className="text-foreground"> “Focus on what PRs are in flight for my status.”</span>
         </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">Start from a preset</span>
+        <AgentInstructionPresetChips value={draft} onApply={setDraft} />
       </div>
 
       <textarea
