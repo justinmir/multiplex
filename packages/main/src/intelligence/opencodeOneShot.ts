@@ -91,6 +91,11 @@ export async function runOpencodePrompt(opts: {
     const tools = Object.fromEntries(DISABLED_TOOLS.map((t) => [t, false]));
 
     const idle = waitForIdle(base, sessionId, abort.signal);
+    // Mark `idle` as handled up front so a rejection (e.g. the /event fetch
+    // resetting) while we await the prompt POST below can't surface as an
+    // unhandled rejection before the Promise.race attaches its handler. The race
+    // still observes the rejection and fails the call.
+    idle.catch(() => {});
 
     const promptResp = await fetch(`${base}/session/${sessionId}/prompt_async`, {
       method: "POST",

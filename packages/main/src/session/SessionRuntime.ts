@@ -4,6 +4,7 @@ import { createHarness } from "@app/core";
 import { registerBuiltInHarnesses } from "../harness/index.js";
 import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
+import { generateSessionTitle } from "./sessionTitle.js";
 import type { WorkspaceManager } from "./WorkspaceManager.js";
 import { pushBranch } from "../git/push.js";
 import { assembleProjectContext } from "../intelligence/assembleContext.js";
@@ -212,6 +213,13 @@ export class SessionRuntime {
     await this.repo.upsertSession(newSession, input.projectId ?? null);
     this.emitFn("data:changed", { kind: "session" });
 
+    // Replace the truncated title with an LLM-generated summary (opencode's
+    // default agent). Fire-and-forget so session start never blocks on it; the
+    // fallback title shows instantly and is swapped in when ready.
+    if ((settings.harnessId ?? "opencode") === "opencode") {
+      void this.refineTitle(sessionId, input.prompt, title, model);
+    }
+
     try {
       const ctx = await this.prepareWorkspace(sessionId, input.projectId ?? null, harness);
       await this.beginRun(harness, { sessionId, prompt: input.prompt, model, ...ctx });
@@ -289,6 +297,24 @@ export class SessionRuntime {
   }
 
   /** Start a harness run for a session id and register it. */
+  /**
+   * Generate a concise title for a new session from its prompt and persist it,
+   * replacing the truncated-prompt fallback. Routed through the per-session
+   * persist queue so it can't clobber concurrent harness-event writes, and only
+   * overwrites the original fallback (never a title that changed meanwhile).
+   */
+  private async refineTitle(sessionId: string, prompt: string, fallbackTitle: string, model: string): Promise<void> {
+    const title = await generateSessionTitle(prompt, model);
+    if (!title || title === fallbackTitle) return;
+    this.enqueuePersist(sessionId, async () => {
+      const existing = await this.repo.getSession(sessionId);
+      if (!existing || existing.title !== fallbackTitle) return;
+      const projectId = await this.repo.getSessionProjectId(sessionId);
+      await this.repo.upsertSession({ ...existing, title }, projectId);
+      this.emitFn("data:changed", { kind: "session" });
+    });
+  }
+
   private async beginRun(
     harness: Harness,
     input: { sessionId: string; prompt: string; model?: string; cwd: string; availableRepos?: string[]; tools?: HostTool[]; notes?: { title: string; body: string }[]; references?: { title: string; url?: string; body?: string }[] },
