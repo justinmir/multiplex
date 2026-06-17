@@ -6,4 +6,8 @@ export function registerIntelligenceHandlers(service: IntelligenceService) {
   handle("project:resynthesize", async (req) => {
     return service.resynthesize(req.projectId);
   });
+
+  handle("suggestions:global", async () => {
+    return service.getGlobalSuggestions();
+  });
 }

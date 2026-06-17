@@ -2,8 +2,8 @@ import type { AppSettingsData, IntelligenceProvider, ProjectSummaryResult, Refer
 
 const ACTIVITY_DEBOUNCE_MS = 3 * 60_000;   // coalesce bursts of activity
 const MAX_PER_HOUR = 6;                      // cost guardrail per project
-const DAILY_MS = 24 * 60 * 60_000;           // resynthesize active projects at most daily
-const DAILY_CHECK_MS = 60 * 60_000;          // how often to check staleness
+const DEFAULT_INTERVAL_MIN = 60;             // resynthesize active projects hourly by default
+const SWEEP_CHECK_MS = 5 * 60_000;           // how often to check staleness
 const STARTUP_DELAY_MS = 30_000;             // catch-up pass shortly after boot
 
 /**
@@ -42,6 +42,7 @@ export class IntelligenceService {
       ...project,
       summary: result.summary,
       nextSteps: result.nextSteps,
+      suggestedPrompts: result.suggestedPrompts?.length ? result.suggestedPrompts : project.suggestedPrompts,
       summarySynthesizedAtMs: result.synthesizedAtMs,
     });
     this.recordRun(projectId);
@@ -87,12 +88,13 @@ export class IntelligenceService {
     if (this.dailyTimer) return;
     const sweep = () => {
       if (!this.getSettings().intelligenceEnabled) return;
+      const intervalMs = Math.max(5, this.getSettings().synthesisIntervalMinutes ?? DEFAULT_INTERVAL_MIN) * 60_000;
       const now = Date.now();
       this.repo.listProjects()
         .then((projects) => {
           for (const p of projects) {
             const last = p.summarySynthesizedAtMs ?? 0;
-            if (p.status === "active" && now - last > DAILY_MS && this.underRateLimit(p.id)) {
+            if (p.status === "active" && now - last > intervalMs && this.underRateLimit(p.id)) {
               this.resynthesize(p.id).catch(() => {});
             }
           }
@@ -100,7 +102,36 @@ export class IntelligenceService {
         .catch(() => {});
     };
     this.startupTimer = setTimeout(sweep, STARTUP_DELAY_MS); // catch-up after boot
-    this.dailyTimer = setInterval(sweep, DAILY_CHECK_MS);
+    this.dailyTimer = setInterval(sweep, SWEEP_CHECK_MS);
+  }
+
+  /**
+   * Suggested session prompts for the project-less "new session" view, derived
+   * from an overview of all projects + recent sessions. Cached and regenerated
+   * at most once per the configured synthesis interval.
+   */
+  private globalCache: { prompts: string[]; ts: number } | null = null;
+  async getGlobalSuggestions(): Promise<string[]> {
+    if (!this.getSettings().intelligenceEnabled) return [];
+    const intervalMs = Math.max(5, this.getSettings().synthesisIntervalMinutes ?? DEFAULT_INTERVAL_MIN) * 60_000;
+    if (this.globalCache && Date.now() - this.globalCache.ts < intervalMs) return this.globalCache.prompts;
+    try {
+      const projects = await this.repo.listProjects();
+      const standalone = await this.repo.listSessions({ projectId: null });
+      const overview = [
+        "Projects:",
+        ...projects.map((p) => `- ${p.name} (${p.status}): ${p.summary || "no summary"}`),
+        "",
+        "Recent standalone sessions:",
+        ...standalone.slice(-10).map((s) => `- ${s.title}`),
+      ].join("\n");
+      const prompts = await this.provider.suggestGlobalPrompts(overview);
+      if (prompts.length > 0) this.globalCache = { prompts, ts: Date.now() };
+      return prompts;
+    } catch (err) {
+      console.error("[intelligence] global suggestions failed:", err);
+      return this.globalCache?.prompts ?? [];
+    }
   }
 
   stop(): void {

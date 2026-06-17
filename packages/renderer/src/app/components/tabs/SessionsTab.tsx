@@ -24,6 +24,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
         backLabel="All sessions"
         session={null}
         references={project.references}
+        starterPrompts={project.suggestedPrompts}
         onStartSession={onStartSession}
         onClose={close}
       />

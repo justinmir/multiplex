@@ -35,10 +35,17 @@ function computeInitialUnread(projectsArg: ReturnType<typeof useProjects>, sessi
 }
 
 function NewSessionView({ onStart, onClose, currentModel, availableModels, onSelectModel }: { onStart: (prompt: string) => void; onClose: () => void; currentModel?: string; availableModels?: Array<{ id: string; label?: string; provider?: string }>; onSelectModel?: (modelId: string) => void }) {
+  // LLM-suggested prompts derived from overall Multiplex context (falls back to
+  // the built-in examples when intelligence is off or hasn't generated any yet).
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    call("suggestions:global", undefined as never).then((p) => setSuggestions(p ?? [])).catch(() => {});
+  }, []);
   return (
     <SessionDetail
       backLabel="Home"
       session={null}
+      starterPrompts={suggestions.length ? suggestions : undefined}
       onStartSession={onStart}
       onClose={onClose}
       currentModel={currentModel}

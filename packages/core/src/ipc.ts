@@ -89,6 +89,8 @@ export interface IpcContract {
 
   // M5.3 — Project intelligence: (re)synthesize summary + next steps
   "project:resynthesize": { req: { projectId: string }; res: { summary: string; nextSteps: string[]; synthesizedAtMs: number } | null };
+  // Suggested session prompts for the project-less "new session" view.
+  "suggestions:global": { req: void; res: string[] };
 }
 
 export interface AppSettingsData {
@@ -102,6 +104,8 @@ export interface AppSettingsData {
   repoRoots: Array<{ name: string; root: string }>;
   intelligenceEnabled: boolean;
   autoSynthesizeOnActivity: boolean;
+  /** Auto-resynthesize each active project this often (minutes). Default 60. */
+  synthesisIntervalMinutes?: number;
 }
 export type IpcChannel = keyof IpcContract;
 export type IpcReq<C extends IpcChannel> = IpcContract[C]["req"];

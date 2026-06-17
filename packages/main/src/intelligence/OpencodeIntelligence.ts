@@ -9,9 +9,18 @@ const OPENCODE_PATH = process.env.OPENCODE_BIN ?? path.join(os.homedir(), ".open
 const SUMMARY_SYSTEM =
   "You are a sharp engineering lead writing a project status update. " +
   "Respond with ONLY a single JSON object, no prose, no code fences, of the exact shape: " +
-  '{"summary": string, "nextSteps": string[]}. ' +
+  '{"summary": string, "nextSteps": string[], "suggestedPrompts": string[]}. ' +
   "summary is 1-3 sentences capturing the current state and the critical path. " +
-  "nextSteps is an ordered list of 2-5 concrete, specific actions. Do not invent facts not in the context.";
+  "nextSteps is an ordered list of 2-5 concrete, specific actions. " +
+  "suggestedPrompts is EXACTLY 4 specific, actionable prompts (imperative, one sentence each) a " +
+  "user could hand to a coding agent to push this project forward, grounded in the context. " +
+  "Do not invent facts not in the context.";
+
+const GLOBAL_PROMPTS_SYSTEM =
+  "You suggest what a developer could work on next across all their projects. " +
+  "Respond with ONLY a JSON object, no prose, no code fences, of the shape " +
+  '{"prompts": string[]} where prompts is EXACTLY 4 short, specific, actionable session ' +
+  "prompts (imperative, one sentence each) grounded in the overview. Do not invent facts.";
 
 const REFERENCE_SYSTEM =
   "Summarize the given reference in ONE concise sentence (no more than 20 words). " +
@@ -59,18 +68,36 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       prompt: buildSummaryPrompt(input),
     });
 
-    const parsed = extractJson(raw) as { summary?: unknown; nextSteps?: unknown } | null;
+    const parsed = extractJson(raw) as { summary?: unknown; nextSteps?: unknown; suggestedPrompts?: unknown } | null;
     if (parsed && typeof parsed.summary === "string") {
-      const nextSteps = Array.isArray(parsed.nextSteps)
-        ? parsed.nextSteps.filter((s): s is string => typeof s === "string")
-        : [];
-      return { summary: parsed.summary.trim(), nextSteps, synthesizedAtMs: Date.now() };
+      const strs = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+      return {
+        summary: parsed.summary.trim(),
+        nextSteps: strs(parsed.nextSteps),
+        suggestedPrompts: strs(parsed.suggestedPrompts).slice(0, 4),
+        synthesizedAtMs: Date.now(),
+      };
     }
 
     // Fallback: keep the narrative, derive no steps rather than fail outright.
     const cleaned = raw.replace(/```[a-z]*|```/g, "").trim();
     if (!cleaned) throw new Error("Intelligence returned an empty response");
-    return { summary: cleaned.slice(0, 600), nextSteps: [], synthesizedAtMs: Date.now() };
+    return { summary: cleaned.slice(0, 600), nextSteps: [], suggestedPrompts: [], synthesizedAtMs: Date.now() };
+  }
+
+  async suggestGlobalPrompts(overview: string): Promise<string[]> {
+    const raw = await runOpencodePrompt({
+      binPath: this.binPath,
+      model: this.getModel(),
+      system: GLOBAL_PROMPTS_SYSTEM,
+      prompt: overview,
+      timeoutMs: 45_000,
+    });
+    const parsed = extractJson(raw) as { prompts?: unknown } | null;
+    const prompts = Array.isArray(parsed?.prompts)
+      ? parsed!.prompts.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      : [];
+    return prompts.map((p) => p.trim()).slice(0, 4);
   }
 
   async summarizeReference(input: { title: string; url?: string; body?: string }): Promise<string> {

@@ -15,6 +15,8 @@ export interface ProjectSummaryResult {
   summary: string;
   /** Ordered next steps (R-INTEL-2). */
   nextSteps: string[];
+  /** 4 actionable, specific session prompts a user could start next. */
+  suggestedPrompts: string[];
   synthesizedAtMs: number;
 }
 
@@ -26,4 +28,7 @@ export interface ProjectSummaryResult {
 export interface IntelligenceProvider {
   summarizeProject(input: ProjectSummaryInput): Promise<ProjectSummaryResult>;
   summarizeReference(input: { title: string; url?: string; body?: string }): Promise<string>;
+  /** 4 actionable session prompts derived from an overall-context overview
+   *  (used for the project-less "new session" suggestions). */
+  suggestGlobalPrompts(overview: string): Promise<string[]>;
 }
