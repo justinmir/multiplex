@@ -18,7 +18,7 @@ export interface IpcContract {
   "notes:delete": { req: { projectId: string; noteId: string }; res: void };
   "refs:upsert": { req: { scope: RefScope; reference: Reference }; res: Reference };
   "refs:delete": { req: { scope: RefScope; refId: string }; res: void };
-  "sessions:archive": { req: { sessionId: string }; res: void };
+  "sessions:archive": { req: { sessionId: string; archived?: boolean }; res: void };
 
   // M3.1 — Session CRUD (create + status update)
   "sessions:create": { req: { session: Session; projectId?: string }; res: Session };

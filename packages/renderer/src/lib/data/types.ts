@@ -12,7 +12,7 @@ export interface DataSource {
   deleteNote(projectId: string, noteId: string): Promise<void>;
   upsertReference(scope: RefScope, reference: Reference): Promise<Reference>;
   deleteReference(scope: RefScope, refId: string): Promise<void>;
-  archiveSession(sessionId: string): Promise<void>;
+  archiveSession(sessionId: string, archived?: boolean): Promise<void>;
 
   // writes (M3.3 — session-scoped references)
   upsertSessionReference(sessionId: string, reference: Reference): Promise<Reference>;

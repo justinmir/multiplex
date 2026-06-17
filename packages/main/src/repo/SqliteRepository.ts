@@ -263,11 +263,11 @@ export class SqliteRepository implements Repository {
 
   // ---- Repository: archive ----
 
-  async archiveSession(id: string): Promise<void> {
+  async archiveSession(id: string, archived = true): Promise<void> {
     const row = this.db.prepare("SELECT project_id, data FROM sessions WHERE id = ?").get(id) as { project_id: string | null; data: string } | undefined;
     if (!row) return;
     const s = JSON.parse(row.data) as Session;
-    this.putSession({ ...s, archived: true }, row.project_id);
+    this.putSession({ ...s, archived }, row.project_id);
   }
 
   async recordTokenUsage(e: TokenUsageEvent): Promise<void> {

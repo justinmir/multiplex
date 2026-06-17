@@ -79,9 +79,9 @@ export function registerRepoWriteHandlers(repo: Repository) {
     emit("data:changed", { kind: "reference" });
   });
 
-  // Session archive — standalone sessions have no projectId, so we skip activity append (Phase 2)
+  // Session archive/unarchive — standalone sessions have no projectId, so we skip activity append (Phase 2)
   handle("sessions:archive", async (req) => {
-    await repo.archiveSession(req.sessionId);
+    await repo.archiveSession(req.sessionId, req.archived ?? true);
     emit("data:changed", { kind: "session" });
   });
 }

@@ -155,8 +155,8 @@ export function AppShell() {
   const archiveSession = (id: string, archived: boolean) => {
     // Optimistic update on local state
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, archived } : s)));
-    // Persist to disk only when archiving (un-archiving is local-only for now)
-    if (archived) mutations.archiveSession(id);
+    // Persist both directions (archive + unarchive).
+    mutations.archiveSession(id, archived);
   };
 
   const createSession = async (prompt: string) => {

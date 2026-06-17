@@ -27,8 +27,8 @@ interface DataMutationValue {
   upsertReference(scope: RefScope, reference: Reference): Promise<Reference>;
   /** Delete a reference from the given scope, then refresh all data from IPC. */
   deleteReference(scope: RefScope, refId: string): Promise<void>;
-  /** Archive a standalone session — optimistic update on local state, then persist. */
-  archiveSession(sessionId: string): Promise<void>;
+  /** Archive/unarchive a session — optimistic update on local state, then persist. */
+  archiveSession(sessionId: string, archived?: boolean): Promise<void>;
   /** Upsert a reference scoped to a specific session, then refresh all data from IPC. */
   upsertSessionReference(sessionId: string, ref: Reference): Promise<Reference>;
   /** Delete a reference scoped to a specific session, then refresh all data from IPC. */
@@ -244,22 +244,24 @@ export function DataProvider({
       }
     },
 
-    /** Archive session — optimistic update on local state + persist via IPC. */
-    async archiveSession(sessionId: string): Promise<void> {
+    /** Archive/unarchive a session — optimistic update on local state + persist via IPC.
+     *  Standalone sessions live in local state (updated optimistically); project
+     *  sessions live under `projects` and refresh from the data:changed event. */
+    async archiveSession(sessionId: string, archived = true): Promise<void> {
       const prevSessions = standaloneSessions;
-      // Optimistic update
+      // Optimistic update for standalone sessions
       setStandaloneSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, archived: true } : s))
+        prev.map((s) => (s.id === sessionId ? { ...s, archived } : s))
       );
       try {
-        await activeSource.archiveSession(sessionId);
-        toast.success("Session archived");
+        await activeSource.archiveSession(sessionId, archived);
+        toast.success(archived ? "Session archived" : "Session unarchived");
       } catch (err) {
         // Roll back optimistic update on failure
         setStandaloneSessions(prevSessions);
-        const msg = err instanceof Error ? err.message : "Failed to archive session";
+        const msg = err instanceof Error ? err.message : "Failed to update session";
         setError(msg);
-        toast.error(`Failed to archive session: ${msg}`);
+        toast.error(`Failed to ${archived ? "archive" : "unarchive"} session: ${msg}`);
         throw err;
       }
     },

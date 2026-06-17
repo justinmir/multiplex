@@ -223,13 +223,15 @@ export function ProjectsSidebar({
                 </div>
                 </ProjectMenu>
 
-                {/* Inline sessions under expanded project */}
+                {/* Inline sessions under expanded project (archived hidden — they
+                    live in the project's "Archived sessions" section). */}
                 {expanded && (
                   <div className="mb-1 ml-5 border-l border-sidebar-border pl-1">
-                    {p.sessions.length === 0 ? (
+                    {p.sessions.filter((s) => !s.archived).length === 0 ? (
                       <div className="px-2.5 py-1 font-mono text-[10.5px] text-muted-foreground/70">No sessions</div>
                     ) : (
-                      [...p.sessions]
+                      p.sessions
+                        .filter((s) => !s.archived)
                         .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAtMs - a.createdAtMs)
                         .map((s) => {
                           const isSelected = selectedProjectSessionId === s.id && selectedProjectId === p.id && view === "project";

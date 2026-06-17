@@ -150,9 +150,9 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
         )}
         {tab === "sessions" && (
           sessionOpen !== null ? (
-            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} />
+            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} onArchiveSession={(id, archived) => mutations.archiveSession(id, archived)} />
           ) : (
-            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} /></div>
+            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} onArchiveSession={(id, archived) => mutations.archiveSession(id, archived)} /></div>
           )
         )}
         {tab === "notes" && <div className="px-8 py-6"><NotesTab project={project} focusedId={noteFocus} onFocus={setNoteFocus} /></div>}
