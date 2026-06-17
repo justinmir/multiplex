@@ -68,25 +68,25 @@ export function AppShell() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [unread, setUnread] = useState<Set<string>>(new Set());
 
-  // M4.2 — Settings dialog state
+  // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // M5.2 — Create project dialog state
+  // Create project dialog state
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   // Context-menu editing state (Edit Project / Rename Session).
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [renamingSession, setRenamingSession] = useState<Session | null>(null);
 
-  // M6.3 — Global search palette (⌘K)
+  // Global search palette (⌘K)
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // M-A8 — Load settings for harness/model state
+  // Load settings for harness/model state
   const [settings, setSettings] = useState<AppSettingsData | null>(null);
   useEffect(() => {
     call("settings:get", undefined).then((data) => setSettings(data));
   }, []);
 
-  // M-A8 — Always fetch models for current harness so we can show in composer
+  // Always fetch models for current harness so we can show in composer
   const { info: harnessInfo } = useHarnessInfo(settings?.harnessId, !!settings);
 
   const handleSelectModel = (modelId: string) => {
@@ -168,7 +168,7 @@ export function AppShell() {
     }
   };
 
-  // M5.1 — project-scoped session creation (M-A5 runtime)
+  // project-scoped session creation
   // Navigate to the session immediately (optimistic) so clicking a suggested
   // next step opens the created session right away instead of waiting for the
   // full startSession round-trip (workspace prep + harness spawn). We mint the
@@ -253,10 +253,10 @@ export function AppShell() {
       </ResizablePanel>
       </ResizablePanelGroup>
 
-      {/* M6.4 — Consolidated settings panel */}
+      {/* Consolidated settings panel */}
       <SettingsPanel open={settingsOpen} onOpenChange={(open) => setSettingsOpen(open)} />
 
-      {/* M5.2 — Create project dialog */}
+      {/* Create project dialog */}
       <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} onCreated={(id) => openProject(id, null)} />
 
       {/* Edit Project (from right-click) */}
@@ -265,7 +265,7 @@ export function AppShell() {
       {/* Rename Session (from right-click) */}
       <RenameSessionDialog session={renamingSession} onOpenChange={(o) => { if (!o) setRenamingSession(null); }} />
 
-      {/* M6.3 — Global search palette (⌘K) */}
+      {/* Global search palette (⌘K) */}
       <SearchPalette
         open={searchOpen}
         onOpenChange={setSearchOpen}

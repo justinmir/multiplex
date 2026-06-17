@@ -5,7 +5,7 @@ export type HarnessId = string; // "mock" | "opencode" | "claude" | "codex"
 /**
  * A tool the agent can invoke whose execution is handled in main (the host),
  * not by the model. The result is returned to the agent AND surfaced as a
- * tool_use/tool_result pair in the transcript. Used by Workstream C's
+ * tool_use/tool_result pair in the transcript. Used by's
  * `open_repo` to lazily materialize a per-repo worktree on first touch.
  */
 export interface HostTool {

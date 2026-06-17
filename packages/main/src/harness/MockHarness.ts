@@ -129,7 +129,7 @@ export class MockHarness implements Harness {
     }
 
     // Phase 1b: declare the first available repo via the open_repo host tool,
-    // then simulate an edit in the materialized worktree (exercises Workstream C).
+    // then simulate an edit in the materialized worktree (exercises).
     const openRepo = input.tools?.find((t) => t.name === "open_repo");
     const firstRepo = input.availableRepos?.[0];
     if (openRepo && firstRepo) {

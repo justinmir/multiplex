@@ -18,7 +18,7 @@ export async function initApp(initConfig: AppInitConfig) {
     .init(terminateAppOnLastWindowClose())
     .init(hardwareAccelerationMode({enable: false}))
     .init(autoUpdater())
-    // M-A7: Graceful shutdown with session cleanup
+    // Graceful shutdown with session cleanup
     .init(createShutdownModule())
     .init(createIpcModule())
 

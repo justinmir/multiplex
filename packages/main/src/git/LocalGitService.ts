@@ -129,7 +129,7 @@ export class LocalGitService implements GitService {
     };
   }
 
-  // ---- worktree management (Workstream C) ----
+  // ---- worktree management ----
 
   async defaultBranch(repoRoot: string): Promise<string> {
     // Prefer origin/HEAD's target.

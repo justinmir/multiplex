@@ -27,7 +27,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [savingToken, setSavingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [connectedLogin, setConnectedLogin] = useState<string | null>(null);
-  // M-A8: Harness state with dynamic model list and health status
+  // Harness state with dynamic model list and health status
   const { info: harnessInfo, loading: harnessLoading, refresh: refreshHarness } = useHarnessInfo(settings?.harnessId, open && !!settings);
 
   const refreshGithubStatus = async () => {
@@ -110,7 +110,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        {/* M-A8: Harness Section with health status and model picker */}
+        {/* Harness Section with health status and model picker */}
         <div className="space-y-4 py-2">
           <h3 className="text-sm font-medium text-muted-foreground">Harness</h3>
 
@@ -144,7 +144,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             </div>
           )}
 
-          {/* M-A8: Test connection button */}
+          {/* Test connection button */}
           <Button
             variant="outline"
             size="sm"
@@ -331,7 +331,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           )}
         </div>
 
-        {/* Storage Section (M7.2) */}
+        {/* Storage Section */}
         <div className="space-y-2 py-2">
           <h3 className="text-sm font-medium text-muted-foreground">Storage</h3>
           <div className="flex items-center justify-between">

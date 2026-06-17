@@ -7,7 +7,7 @@ import type {
 import { seedProjects, seedStandaloneSessions, seedEnabled } from "./seed.js";
 
 /**
- * SQLite-backed Repository (M7.2). Same interface as JsonRepository, but writes
+ * SQLite-backed Repository. Same interface as JsonRepository, but writes
  * single rows instead of rewriting the whole DB on every mutation, and keeps
  * data on disk rather than fully in memory.
  *

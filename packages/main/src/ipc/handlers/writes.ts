@@ -58,7 +58,7 @@ export function registerRepoWriteHandlers(repo: Repository) {
     }
 
     emit("data:changed", { kind: "reference" });
-    // M5.5 — derive a one-line summary for the new reference (fire-and-forget).
+    // derive a one-line summary for the new reference (fire-and-forget).
     void getIntelligenceService()?.ingestReference(req.scope, ref);
     return ref;
   });

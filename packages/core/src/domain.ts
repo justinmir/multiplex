@@ -191,7 +191,7 @@ export interface Project {
   activity: ActivityItem[];
   summary: string;
   nextSteps: string[];
-  /** Epoch ms when summary/nextSteps were last LLM-synthesized (M5.3). */
+  /** Epoch ms when summary/nextSteps were last LLM-synthesized. */
   summarySynthesizedAtMs?: number;
   /** 4 actionable session prompts generated during synthesis. */
   suggestedPrompts?: string[];

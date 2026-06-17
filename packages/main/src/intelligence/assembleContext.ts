@@ -20,7 +20,7 @@ export interface AssembledContext {
 /**
  * Assemble a project's notes + references + state into a compact, token-bounded
  * context. Reused for both LLM summaries and harness runs (so every agent run
- * inherits the project's notes/refs — the R-INTEL-5 contract).
+ * inherits the project's notes/refs).
  */
 export function assembleProjectContext(project: Project): AssembledContext {
   const notes = (project.notes ?? []).slice(0, MAX_ITEMS).map((n) => ({

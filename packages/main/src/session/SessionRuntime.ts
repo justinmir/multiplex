@@ -108,7 +108,7 @@ export class SessionRuntime {
   }
 
   /**
-   * Open one draft PR per touched repo that has changes (M-B5 fan-out). Pushes
+   * Open one draft PR per touched repo that has changes. Pushes
    * each materialized worktree's session branch, opens a draft PR, and appends
    * them all to the session's linkedPRs.
    */
@@ -270,7 +270,7 @@ export class SessionRuntime {
 
     const cwd = wm.ensureRoot(sessionId);
     const registered = wm.catalog();
-    // M-D2 — a project session inherits its project's notes + references so the
+    // a project session inherits its project's notes + references so the
     // agent has the same context the intelligence layer uses.
     const project = projectId ? await this.repo.getProject(projectId) : null;
     const inScope = project?.repos ?? [];
@@ -988,7 +988,7 @@ export class SessionRuntime {
     this.emitFn(`session:${sessionId}:status`, { sessionId, status: updated.status });
     this.emitFn("data:changed", { kind: "session" });
 
-    // M5.4 — a completed turn is meaningful project activity; nudge synthesis.
+    // a completed turn is meaningful project activity; nudge synthesis.
     if (event.type === "done" && event.reason === "completed" && projectId) {
       getIntelligenceService()?.notifyActivity(projectId);
     }

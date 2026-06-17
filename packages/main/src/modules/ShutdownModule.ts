@@ -20,7 +20,7 @@ export function createShutdownModule(): AppModule {
 
       // Also handle uncaught exceptions to prevent silent crashes
       process.on("uncaughtException", (err) => {
-        console.error("[M-A7] Uncaught exception:", err.message);
+        console.error("Uncaught exception:", err.message);
         const runtime = getSessionRuntime();
         if (runtime) {
           try { runtime.disposeAll(); } catch { /* ignore */ }
@@ -28,7 +28,7 @@ export function createShutdownModule(): AppModule {
       });
 
       process.on("unhandledRejection", (reason) => {
-        console.error("[M-A7] Unhandled rejection:", reason);
+        console.error("Unhandled rejection:", reason);
       });
     },
   };

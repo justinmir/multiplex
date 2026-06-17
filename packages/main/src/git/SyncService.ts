@@ -33,7 +33,7 @@ export class SyncService {
       try {
         // List open PRs, then enrich each with full detail (files, comments,
         // check runs, aggregated counts + verdict) via the forge, so the stored
-        // project PRs carry the same live data the session rails show (M-B2).
+        // project PRs carry the same live data the session rails show.
         const prs = await githubClient.listPRs(owner, name);
         for (const pr of prs) {
           try {

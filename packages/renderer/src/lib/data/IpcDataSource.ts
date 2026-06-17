@@ -22,7 +22,7 @@ export class IpcDataSource implements DataSource {
     return call("sessions:get", { id });
   }
 
-  // ---- writes (M1.5) ----
+  // ---- writes ----
 
   async upsertNote(projectId: string, note: Note): Promise<Note> {
     return call("notes:upsert", { projectId, note });
@@ -44,7 +44,7 @@ export class IpcDataSource implements DataSource {
     return call("sessions:archive", { sessionId, archived });
   }
 
-  // ---- writes (M3.3 — session-scoped references) ----
+  // ---- writes ----
 
   async upsertSessionReference(sessionId: string, reference: Reference): Promise<Reference> {
     return call("refs:upsert", { scope: { sessionId }, reference });
@@ -54,7 +54,7 @@ export class IpcDataSource implements DataSource {
     return call("refs:delete", { scope: { sessionId }, refId });
   }
 
-  // ---- writes (M3.1 — session CRUD) ----
+  // ---- writes ----
 
   async createSession(session: Session, projectId?: string): Promise<Session> {
     return call("sessions:create", { session, projectId });
@@ -64,7 +64,7 @@ export class IpcDataSource implements DataSource {
     return call("sessions:update-status", { sessionId, status });
   }
 
-  // ---- writes (M2.5 — project management + sync) ----
+  // ---- writes ----
 
   async upsertProject(project: Project): Promise<Project> {
     return call("projects:upsert", { project });
@@ -78,13 +78,13 @@ export class IpcDataSource implements DataSource {
     return call("github:get-status", undefined as never);
   }
 
-  // ---- M4.2 — GitHub connect flow ----
+  // ---- GitHub connect flow ----
 
   async connectGitHub(): Promise<{ success: boolean }> {
     return call("github:connect", undefined as never);
   }
 
-  // ---- M4.3 — PR merge + external links ----
+  // ---- PR merge + external links ----
 
   async mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }> {
     return call("prs:merge", { owner, repo, prNumber });
@@ -94,7 +94,7 @@ export class IpcDataSource implements DataSource {
     return call("app:open-url", { url });
   }
 
-  // ---- M-A5 — Session runtime (live agent harness) ----
+  // ---- Session runtime (live agent harness) ----
 
   async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
     return call("session:start", input);
@@ -128,7 +128,7 @@ export class IpcDataSource implements DataSource {
     return call("sessions:set-pinned", { sessionId, pinned });
   }
 
-  // ---- M-A8 — Harness health + model list ----
+  // ---- Harness health + model list ----
 
   async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {
     return call("harness:health", { harnessId });

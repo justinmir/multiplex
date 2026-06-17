@@ -42,7 +42,7 @@ type ModelsResult = Array<{ id: string; label?: string; provider?: string }>;
 const healthCache = new Map<string, CacheSlot<HealthResult>>();
 const modelsCache = new Map<string, CacheSlot<ModelsResult>>();
 
-/** Register session runtime IPC handlers (M-A4). */
+/** Register session runtime IPC handlers. */
 export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
   handle("session:start", async (req) => {
     return runtime.startSession({
@@ -73,7 +73,7 @@ export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
     return runtime.removeQueued(req.sessionId, req.index);
   });
 
-  // M-A8 — harness health check (cached per harnessId; see memoize above)
+  // harness health check (cached per harnessId; see memoize above)
   handle("harness:health", async (req) => {
     return memoize(healthCache, req.harnessId, (v) => v.ok, async () => {
       const harness = createHarness({ id: req.harnessId } as HarnessConfig);
@@ -82,7 +82,7 @@ export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
     });
   });
 
-  // M-A8 — list models for a given harness (cached per harnessId)
+  // list models for a given harness (cached per harnessId)
   handle("harness:models", async (req) => {
     return memoize(modelsCache, req.harnessId, (v) => v.length > 0, async () => {
       const harness = createHarness({ id: req.harnessId } as HarnessConfig);

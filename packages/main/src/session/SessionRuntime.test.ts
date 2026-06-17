@@ -42,7 +42,7 @@ async function waitUntil(repo: InMemoryRepository, id: string, pred: (s: import(
   throw new Error("timed out waiting for predicate");
 }
 
-// M7.3 — the core flow on the deterministic mock harness (CI-safe: no opencode,
+// the core flow on the deterministic mock harness (CI-safe: no opencode,
 // no network, no keys).
 test("mock session: start → stream → complete → persisted transcript", async () => {
   const repo = new InMemoryRepository();

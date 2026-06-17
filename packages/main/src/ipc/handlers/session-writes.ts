@@ -9,7 +9,7 @@ async function applyDerived(repo: Repository, updated: Session, projectId: strin
   const derived = deriveSessionStatus(updated);
   if (derived !== updated.status) {
     const patched = await repo.upsertSession({ ...updated, status: derived }, projectId);
-    // M6.2 — emit granular status event for targeted renderer updates
+    // emit granular status event for targeted renderer updates
     emit("session-status-changed", { sessionId: patched.id, status: derived });
     return patched;
   }
@@ -53,7 +53,7 @@ export function registerSessionWriteHandlers(repo: Repository) {
     const derived = deriveSessionStatus(session);
     if (derived !== session.status) {
       session = await repo.upsertSession({ ...session, status: derived }, projectId);
-      // M6.2 — emit granular status event for targeted renderer updates
+      // emit granular status event for targeted renderer updates
       emit("session-status-changed", { sessionId: session.id, status: derived });
     }
 

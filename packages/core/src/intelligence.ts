@@ -11,9 +11,9 @@ export interface ProjectSummaryInput {
 }
 
 export interface ProjectSummaryResult {
-  /** Narrative status update (R-INTEL-1). */
+  /** Narrative status update. */
   summary: string;
-  /** Ordered next steps (R-INTEL-2). */
+  /** Ordered next steps. */
   nextSteps: string[];
   /** A ready-to-run session prompt for each next step (aligned by index). */
   nextStepPrompts: string[];

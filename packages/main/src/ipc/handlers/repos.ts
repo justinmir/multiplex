@@ -2,7 +2,7 @@ import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import { repoRegistry } from "../../git/RepoRegistry.js";
 
-/** Register repo-catalog IPC handlers (M-C2). */
+/** Register repo-catalog IPC handlers. */
 export function registerRepoHandlers() {
   handle("repos:list", () => repoRegistry.list());
 

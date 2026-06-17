@@ -16,7 +16,7 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue>(null!);
 
-// ---- Mutation context (M1.5) ----
+// ---- Mutation context ----
 
 interface DataMutationValue {
   /** Upsert a note in the given project, then refresh all data from IPC. */
@@ -34,13 +34,13 @@ interface DataMutationValue {
   /** Delete a reference scoped to a specific session, then refresh all data from IPC. */
   deleteSessionReference(sessionId: string, refId: string): Promise<void>;
 
-  // M3.1 — session CRUD
+  // session CRUD
   /** Create a new standalone session via IPC and refresh data. */
   createSession(session: Session, projectId?: string): Promise<Session>;
   /** Update a session's status — optimistic update on local state, then persist. */
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
 
-  // M2.5 — project management + sync
+  // project management + sync
   /** Create or update a project, then refresh all data from IPC. */
   upsertProject(project: Project): Promise<Project>;
   /** Trigger GitHub PR sync for a project; refreshes data on completion. */
@@ -50,17 +50,17 @@ interface DataMutationValue {
   /** True while any project sync is in progress. */
   isSyncing: boolean;
 
-  // M4.2 — GitHub connect flow
+  // GitHub connect flow
   /** Initiate GitHub OAuth connection; refreshes data on completion. */
   connectGitHub(): Promise<{ success: boolean }>;
 
-  // M4.3 — PR merge + external links
+  // PR merge + external links
   /** Merge a pull request via Octokit and refresh data. */
   mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }>;
   /** Open a URL in the system browser via IPC. */
   openUrl(url: string): Promise<void>;
 
-  // M-B4 / M-B5 — PR actions
+  // PR actions
   /** Reply to a PR/review comment on GitHub. */
   replyToComment(repo: string, number: number, commentId: string, body: string): Promise<void>;
   /** Re-run a PR's checks on GitHub. */
@@ -72,13 +72,13 @@ interface DataMutationValue {
   /** Open a draft PR per touched repo with changes; returns the count opened. */
   openSessionPR(sessionId: string): Promise<{ opened: number; message?: string }>;
 
-  // M5.3 — project intelligence
+  // project intelligence
   /** (Re)synthesize a project's summary + next steps via the intelligence layer. */
   resynthesizeProject(projectId: string): Promise<void>;
   /** (Re)index every reference of a project via the harness (web/MCP tools). */
   indexReferences(projectId: string): Promise<void>;
 
-  // M-A5 — Session runtime (live agent harness)
+  // Session runtime (live agent harness)
   /** Start a new session with the active harness. Returns the session ID. */
   startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }>;
   /** Send a follow-up message to an existing running session. */
@@ -95,7 +95,7 @@ interface DataMutationValue {
   /** Pin/unpin a session (sorts to the top of the sidebar). */
   setSessionPinned(sessionId: string, pinned: boolean): Promise<void>;
 
-  // M-A8 — Harness health + model list
+  // Harness health + model list
   /** Check harness health. */
   checkHarnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;
   /** Get available models for a given harness id. */
@@ -118,7 +118,7 @@ export function DataProvider({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // M2.5 — GitHub connection status + sync tracking
+  // GitHub connection status + sync tracking
   const [githubConnected, setGithubConnected] = useState(false);
   const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
 
@@ -143,7 +143,7 @@ export function DataProvider({
     loadData();
   }, [loadData]);
 
-  // M7.1 — self-heal: refetch authoritative state on focus/online so missed
+  // self-heal: refetch authoritative state on focus/online so missed
   // push events (window backgrounded, machine asleep) don't leave stale data.
   useReconnect(loadData);
 
@@ -156,8 +156,8 @@ export function DataProvider({
     });
   }, [activeSource]);
 
-  // M3.2 — subscribe to data:changed push events from main process
-  // M6.2 — subscribe to session-status-changed for optimistic local updates
+  // subscribe to data:changed push events from main process
+  // subscribe to session-status-changed for optimistic local updates
   useEffect(() => {
     const onDataChanged = (_event: unknown) => {
       loadData();
@@ -188,7 +188,7 @@ export function DataProvider({
     refresh: loadData,
   };
 
-  // ---- Mutation methods (M1.5) ----
+  // ---- Mutation methods ----
 
   /** Project-scoped mutations: call IPC write, then full refresh to stay consistent. */
   const mutationValue = useMemo<DataMutationValue>(() => ({
@@ -328,7 +328,7 @@ export function DataProvider({
       }
     },
 
-    // ---- M2.5 — project management + sync ----
+    // ---- project management + sync ----
 
     async upsertProject(project: Project): Promise<Project> {
       try {
@@ -362,9 +362,9 @@ export function DataProvider({
       }
     },
 
-    // ---- M3.4 — agent workflow foundation ----
+    // ---- agent workflow foundation ----
 
-    /** M4.2 — Initiate GitHub OAuth connection, then refresh all data including status. */
+    /** Initiate GitHub OAuth connection, then refresh all data including status. */
     async connectGitHub(): Promise<{ success: boolean }> {
       const loadingId = toast.loading("Connecting to GitHub...");
       try {
@@ -385,7 +385,7 @@ export function DataProvider({
       }
     },
 
-    /** M4.3 — Merge a PR via Octokit and refresh all data. */
+    /** Merge a PR via Octokit and refresh all data. */
     async mergePR(owner: string, repo: string, prNumber: number): Promise<{ success: boolean }> {
       const loadingId = toast.loading("Merging pull request...");
       try {
@@ -401,12 +401,12 @@ export function DataProvider({
       }
     },
 
-    /** M4.3 — Open a URL in the system browser via IPC. */
+    /** Open a URL in the system browser via IPC. */
     async openUrl(url: string): Promise<void> {
       await activeSource.openUrl(url);
     },
 
-    // ---- M-B4 / M-B5 — PR actions ----
+    // ---- PR actions ----
 
     /** Reply to a PR/review comment on GitHub. */
     async replyToComment(repo: string, number: number, commentId: string, body: string): Promise<void> {
@@ -454,7 +454,7 @@ export function DataProvider({
       }
     },
 
-    /** M5.3 — (re)synthesize a project's summary + next steps. */
+    /** (re)synthesize a project's summary + next steps. */
     async resynthesizeProject(projectId: string): Promise<void> {
       const id = toast.loading("Synthesizing project summary…");
       try {
@@ -497,7 +497,7 @@ export function DataProvider({
       }
     },
 
-    // ---- M-A5 — Session runtime (live agent harness) ----
+    // ---- Session runtime (live agent harness) ----
 
     /** Start a new session with the active harness. Returns the session ID. */
     async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
@@ -569,7 +569,7 @@ export function DataProvider({
       catch (err) { console.error("Failed to pin session:", err); }
     },
 
-    // ---- M-A8 — Harness health + model list ----
+    // ---- Harness health + model list ----
 
     /** Check harness health. */
     async checkHarnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {

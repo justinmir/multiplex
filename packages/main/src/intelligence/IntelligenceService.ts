@@ -51,7 +51,7 @@ export class IntelligenceService {
     return result;
   }
 
-  /** Index a freshly-added reference ONCE (M5.5 / laundry-list-2). */
+  /** Index a freshly-added reference ONCE. */
   async ingestReference(scope: RefScope, ref: Reference): Promise<void> {
     if (!this.getSettings().intelligenceEnabled) return;
     if (ref.indexedAtMs) return; // already indexed once
@@ -107,7 +107,7 @@ export class IntelligenceService {
     }
   }
 
-  /** Notify of project activity; debounce an auto-resynthesis if enabled (M5.4). */
+  /** Notify of project activity; debounce an auto-resynthesis if enabled. */
   notifyActivity(projectId: string): void {
     const s = this.getSettings();
     if (!s.intelligenceEnabled || !s.autoSynthesizeOnActivity) return;

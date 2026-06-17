@@ -52,7 +52,7 @@ export interface GitService {
   /** Get the latest commit on a branch (or HEAD if no branch specified). Returns null if not a git dir or branch doesn't exist. */
   getLastCommit(dir: string, branch?: string): Promise<CommitInfo | null>;
 
-  // ---- worktree management (Workstream C) ----
+  // ---- worktree management ----
 
   /** Create a worktree at `worktreePath` on a new `branch` off `baseBranch`
    *  (defaults to the repo's default branch). Returns the worktree path. */

@@ -13,7 +13,7 @@ export function registerGitHubHandlers() {
     return githubClient.getCheckRuns(req.owner, req.repo, req.branch);
   });
 
-  // M4.3 — Merge a PR via Octokit
+  // Merge a PR via Octokit
   handle("prs:merge", async (req) => {
     const success = await githubClient.mergePR(req.owner, req.repo, req.prNumber);
     return { success };

@@ -10,7 +10,7 @@ interface Props {
   onOpenSession: (id: string | "new") => void;
   onOpenNote: (id: string) => void;
   onOpenTab: (t: "sessions" | "notes" | "references") => void;
-  /** M5.3 — (re)synthesize the project summary + next steps. */
+  /** (re)synthesize the project summary + next steps. */
   onResynthesize?: () => void;
   resynthesizing?: boolean;
   /** Start a new project session from a prompt (used by clickable next steps). */

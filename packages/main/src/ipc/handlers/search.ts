@@ -4,7 +4,7 @@ import type { IpcRes } from "@app/core";
 
 type SearchResult = IpcRes<"search:query">[number];
 
-/** Register the global search handler over real projects, sessions, and PRs (M6.3). */
+/** Register the global search handler over real projects, sessions, and PRs. */
 export function registerSearchHandlers(repo: Repository) {
   handle("search:query", async (req) => {
     const q = req.q.trim().toLowerCase();

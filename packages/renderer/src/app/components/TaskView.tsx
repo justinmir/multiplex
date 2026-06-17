@@ -18,13 +18,13 @@ interface Props {
   /** Called when user clicks Stop while agent is running. */
   onStopAgent?: () => void;
   onClose: () => void;
-  // M-A8 — model selection
+  // model selection
   currentModel?: string;
   availableModels?: Array<{ id: string; label?: string; provider?: string }>;
   onSelectModel?: (modelId: string) => void;
-  // M-C4 — real working-tree diffs
+  // real working-tree diffs
   worktreeChanges?: Array<{ repo: string; files: FileChange[] }>;
-  // M-B4 / M-B5 — PR actions
+  // PR actions
   onReplyToComment?: (repo: string, number: number, commentId: string, body: string) => void;
   onRerunChecks?: (repo: string, number: number) => void;
   onAddressComments?: (comments: string[]) => void;

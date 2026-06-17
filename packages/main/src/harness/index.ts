@@ -10,7 +10,7 @@ export function registerBuiltInHarnesses(): void {
     supports(id: string) { return id === "mock"; },
   });
 
-  // M-A6 — Register opencode harness adapter
+  // Register opencode harness adapter
   const factory = new OpencodeHarnessFactory();
   registerHarness("opencode", factory);
 }

@@ -7,7 +7,7 @@ import type { HostTool } from "@app/core";
 
 /**
  * A single in-process MCP server that bridges opencode's agent to host-executed
- * tools (Workstream C's `open_repo`). opencode connects to it as a remote MCP
+ * tools. opencode connects to it as a remote MCP
  * server (configured per session via the workspace-root `opencode.json`); each
  * session's tools are routed by the URL path `/mcp/<sessionId>`.
  *

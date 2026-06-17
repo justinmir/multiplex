@@ -25,13 +25,13 @@ interface Props {
   onArchiveSession: (id: string, archived: boolean) => void;
   isProjectSessionUnread: (projectId: string, sessionId: string) => boolean;
   isStandaloneSessionUnread: (sessionId: string) => boolean;
-  /** M4.2 — callback to open the Settings dialog */
+  /** callback to open the Settings dialog */
   onOpenSettings: () => void;
   /** Open the token-usage analytics page. */
   onOpenAnalytics?: () => void;
-  /** M5.2 — callback to open the Create Project dialog */
+  /** callback to open the Create Project dialog */
   onOpenCreateProject?: () => void;
-  /** M6.3 — open the global search (⌘K) palette */
+  /** open the global search (⌘K) palette */
   onOpenSearch?: () => void;
   /** Right-click actions. */
   onEditProject?: (project: Project) => void;

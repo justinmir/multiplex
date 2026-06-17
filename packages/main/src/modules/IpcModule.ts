@@ -40,10 +40,10 @@ import { registerBuiltInHarnesses } from "../harness/index.js";
 export function createIpcModule(): AppModule {
   return {
     async enable(_ctx: ModuleContext) {
-      // M0.4: app:ping handler
+      // app:ping handler
       handle("app:ping", (req) => ({ value: req.value, ts: Date.now() }));
 
-      // M1.3 / M7.2: Repository — select the persistence backend. SQLite is
+      // Repository — select the persistence backend. SQLite is
       // opt-in (Settings or MULTIPLEX_DB=sqlite); the module (and its native
       // dependency) is only loaded when chosen, so the default JSON path and
       // boot never touch better-sqlite3.
@@ -67,27 +67,27 @@ export function createIpcModule(): AppModule {
       setTokenRepo(repo); // route token-usage events to the repo
       registerAnalyticsHandlers(repo);
 
-      // M1.5: Repository write handlers (persist to disk)
+      // Repository write handlers (persist to disk)
       registerRepoWriteHandlers(repo);
 
-      // M2.5: Project-level write handlers (create/update projects)
+      // Project-level write handlers (create/update projects)
       registerProjectWriteHandlers(repo);
 
-      // M2.2: GitHub OAuth + token management handlers
+      // GitHub OAuth + token management handlers
       registerGitHubAuthHandlers();
 
-      // M2.3: GitHub API client (Octokit) — PRs, checks, reviews
+      // GitHub API client (Octokit) — PRs, checks, reviews
       registerGitHubHandlers();
 
-      // M2.4: Wire SyncService with repository instance and register sync handler
+      // Wire SyncService with repository instance and register sync handler
       const syncSvc = new SyncService(repo);
       setSyncService(syncSvc);
       registerSyncHandlers();
 
-      // M3.1: Session CRUD handlers (create + status update)
+      // Session CRUD handlers (create + status update)
       registerSessionWriteHandlers(repo);
 
-      // M-A4: Register built-in harnesses and create the session runtime
+      // Register built-in harnesses and create the session runtime
       registerBuiltInHarnesses();
       const workspaceManager = new WorkspaceManager(gitService, repoRegistry, sessionsDir());
       const runtime = new SessionRuntime(
@@ -100,10 +100,10 @@ export function createIpcModule(): AppModule {
       setSessionRuntime(runtime);
       registerSessionRuntimeHandlers(runtime);
 
-      // M-C4: Real diffs across a session's materialized worktrees
+      // Real diffs across a session's materialized worktrees
       registerChangesHandlers(runtime);
 
-      // M-B3/M-B4/M-B5: live PR detail, PR actions, and PR fan-out.
+      // live PR detail, PR actions, and PR fan-out.
       // A background poller keeps PR detail cached so switching sessions never
       // blocks on GitHub; pr:get reads the cache and a manual sync forces a
       // refresh. Open, non-merged PRs are refreshed on an interval with
@@ -118,31 +118,31 @@ export function createIpcModule(): AppModule {
       prPoller.start();
       registerPrHandlers(githubForge, runtime, prPoller);
 
-      // M-A7: Recover sessions left in "running" state from a previous crash
+      // Recover sessions left in "running" state from a previous crash
       (async () => {
         try {
           const recovered = await runtime.recoverStaleSessions();
           if (recovered.length > 0) {
-            console.log(`[M-A7] Recovered ${recovered.length} stale session(s):`, recovered);
+            console.log(`Recovered ${recovered.length} stale session(s):`, recovered);
           }
         } catch (err) {
-          console.error("[M-A7] Failed to recover stale sessions:", err);
+          console.error("Failed to recover stale sessions:", err);
         }
       })();
 
-      // M4.3: Application-level handlers (open URL in system browser)
+      // Application-level handlers (open URL in system browser)
       registerAppHandlers();
 
-      // M6.4: Settings surface (consolidate) — harness, tokens, repos, intelligence
+      // Settings surface (consolidate) — harness, tokens, repos, intelligence
       registerSettingsHandlers();
 
-      // M-C2: Repo catalog (registry of available repos the agent may declare)
+      // Repo catalog (registry of available repos the agent may declare)
       registerRepoHandlers();
 
-      // M6.3: Global search over real projects, sessions, and PRs
+      // Global search over real projects, sessions, and PRs
       registerSearchHandlers(repo);
 
-      // M5 (Phase 5): Project intelligence via opencode
+      // Project intelligence via opencode
       const intelligence = new IntelligenceService(
         repo,
         new OpencodeIntelligence(() => settings.get().defaultModel),

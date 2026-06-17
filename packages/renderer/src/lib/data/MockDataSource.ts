@@ -19,7 +19,7 @@ export class MockDataSource implements DataSource {
     return mockSessions.find((s) => s.id === id) ?? null;
   }
 
-  // ---- writes (M1.5 — no-ops for mock data source) ----
+  // ---- writes ----
 
   async upsertNote(_projectId: string, note: Note): Promise<Note> {
     return note;
@@ -41,7 +41,7 @@ export class MockDataSource implements DataSource {
     // no-op in mock
   }
 
-  // ---- writes (M3.3 — session-scoped references; not implemented in mock) ----
+  // ---- writes ----
 
   async upsertSessionReference(_sessionId: string, reference: Reference): Promise<Reference> {
     return reference;
@@ -51,7 +51,7 @@ export class MockDataSource implements DataSource {
     // no-op in mock
   }
 
-  // ---- writes (M3.1 — no-ops for mock data source) ----
+  // ---- writes ----
 
   async createSession(session: Session, _projectId?: string): Promise<Session> {
     return session;
@@ -61,7 +61,7 @@ export class MockDataSource implements DataSource {
     // no-op in mock
   }
 
-  // ---- writes (M2.5 — no-ops for mock data source) ----
+  // ---- writes ----
 
   async upsertProject(project: Project): Promise<Project> {
     return project;
@@ -75,13 +75,13 @@ export class MockDataSource implements DataSource {
     return { connected: false, oauthAvailable: false };
   }
 
-  // ---- M4.2 — GitHub connect flow (stub) ----
+  // ---- GitHub connect flow (stub) ----
 
   async connectGitHub(): Promise<{ success: boolean }> {
     return { success: false };
   }
 
-  // ---- M4.3 — PR merge + external links (stubs) ----
+  // ---- PR merge + external links (stubs) ----
 
   async mergePR(_owner: string, _repo: string, _prNumber: number): Promise<{ success: boolean }> {
     return { success: false };
@@ -91,7 +91,7 @@ export class MockDataSource implements DataSource {
     // no-op in mock — renderer can't open external URLs without IPC
   }
 
-  // ---- M-A5 — Session runtime (stubs for mock) ----
+  // ---- Session runtime (stubs for mock) ----
 
   async startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }> {
     return { sessionId: input.sessionId ?? `mock_${Date.now().toString(36)}` };
@@ -106,7 +106,7 @@ export class MockDataSource implements DataSource {
   async renameSession(_sessionId: string, _title: string): Promise<void> {}
   async setSessionPinned(_sessionId: string, _pinned: boolean): Promise<void> {}
 
-  // ---- M-A8 — Harness health + model list (stubs for mock) ----
+  // ---- Harness health + model list (stubs for mock) ----
 
   async harnessHealth(_harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {
     return { ok: true, version: "mock-1.0.0" };
