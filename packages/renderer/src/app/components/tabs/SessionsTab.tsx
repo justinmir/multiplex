@@ -42,6 +42,19 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
     );
   }
 
+  // A specific session was requested but isn't in the project yet — this is the
+  // brief window after an optimistic "start session" navigation, before the
+  // runtime has persisted it and emitted data:changed. Show a starting state
+  // rather than flashing the full session list.
+  if (openId && openId !== "new") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+        <Terminal className="h-6 w-6 animate-pulse text-muted-foreground" />
+        <p className="text-[13px] text-muted-foreground">Starting session…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
