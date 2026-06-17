@@ -5,15 +5,17 @@ import { OverviewTab } from "./tabs/OverviewTab";
 import { SessionsTab } from "./tabs/SessionsTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { ReferencesTab } from "./tabs/ReferencesTab";
+import { InstructionsTab } from "./tabs/InstructionsTab";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
 
-type TabId = "overview" | "sessions" | "notes" | "references";
+type TabId = "overview" | "sessions" | "notes" | "references" | "instructions";
 
 const tabs: { id: TabId; label: string; count?: (p: Project) => number }[] = [
   { id: "overview", label: "Overview" },
-  { id: "sessions", label: "Sessions", count: (p) => p.sessions.length },
+  { id: "sessions", label: "Sessions", count: (p) => p.sessions.filter((s) => !s.archived).length },
   { id: "notes", label: "Notes", count: (p) => p.notes.length },
   { id: "references", label: "References", count: (p) => p.references.length },
+  { id: "instructions", label: "Instructions" },
 ];
 
 interface ProjectViewProps {
@@ -165,6 +167,7 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
             />
           </div>
         )}
+        {tab === "instructions" && <div className="px-8 py-6"><InstructionsTab project={project} /></div>}
       </div>
     </div>
   );
