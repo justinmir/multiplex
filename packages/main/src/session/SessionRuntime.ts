@@ -4,7 +4,7 @@ import { createHarness } from "@app/core";
 import { registerBuiltInHarnesses } from "../harness/index.js";
 import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
-import { generateSessionTitle } from "./sessionTitle.js";
+import { generateSessionTitle, generateBranchName } from "./sessionTitle.js";
 import type { WorkspaceManager } from "./WorkspaceManager.js";
 import { pushBranch } from "../git/push.js";
 import { assembleProjectContext } from "../intelligence/assembleContext.js";
@@ -55,6 +55,8 @@ export class SessionRuntime {
   /** Sessions with a turn currently in progress. Sends that arrive while a
    *  session is here are queued; the queue drains when the turn ends. */
   private activeTurns = new Set<string>();
+  /** Per-session in-flight branch-name resolution (deduped + cached). */
+  private branchGen = new Map<string, Promise<string>>();
 
   private workspaces?: WorkspaceManager;
   private forge?: ForgeService;
@@ -298,11 +300,59 @@ export class SessionRuntime {
     const wm = this.workspaces;
     if (!wm) return { content: "Workspaces unavailable", isError: true };
     const existing = (await this.repo.getSession(sessionId))?.workspaces ?? [];
-    const { workspace, error } = await wm.openRepo(sessionId, repoId, existing);
+    const branch = await this.ensureBranchName(sessionId);
+    const { workspace, error } = await wm.openRepo(sessionId, repoId, existing, branch);
     if (error || !workspace) return { content: error ?? `Failed to open ${repoId}`, isError: true };
     // Persist + forward through the normal event path (dedupes by repo+branch).
     this.onHarnessEvent(sessionId, { type: "workspace", workspace });
     return { content: workspace.worktree ?? "" };
+  }
+
+  /**
+   * Resolve the branch name for a session's worktrees, deciding it once. Prefers
+   * an already-stored name (persists across restarts), then any existing
+   * worktree's branch, then a short human-readable name generated from the prompt
+   * (opencode only; deterministic `multiplex/<id>` fallback otherwise).
+   */
+  private ensureBranchName(sessionId: string): Promise<string> {
+    let pending = this.branchGen.get(sessionId);
+    if (pending) return pending;
+    pending = (async (): Promise<string> => {
+      const wm = this.workspaces;
+      const fallback = wm ? wm.branchFor(sessionId) : `multiplex/${sessionId}`;
+      const session = await this.repo.getSession(sessionId);
+      if (!session) return fallback;
+      if (session.branch) return session.branch;
+      const existing = session.workspaces?.find((w) => w.branch)?.branch;
+      if (existing) { await this.storeBranch(sessionId, existing); return existing; }
+
+      let branch = fallback;
+      if ((this.settingsFn().harnessId ?? "opencode") === "opencode") {
+        const slug = await generateBranchName(session.prompt ?? session.title, session.model);
+        if (slug) branch = `${slug}-${this.branchSuffix(sessionId)}`;
+      }
+      await this.storeBranch(sessionId, branch);
+      return branch;
+    })();
+    this.branchGen.set(sessionId, pending);
+    return pending;
+  }
+
+  /** Short, filesystem/git-safe suffix from the session id to keep slugs unique. */
+  private branchSuffix(sessionId: string): string {
+    return sessionId.replace(/[^a-z0-9]/gi, "").slice(-6).toLowerCase() || "wt";
+  }
+
+  /** Persist the chosen branch onto the session (once), via the serial queue. */
+  private storeBranch(sessionId: string, branch: string): void {
+    this.enqueuePersist(sessionId, async () => {
+      const s = await this.repo.getSession(sessionId);
+      if (s && !s.branch) {
+        const projectId = await this.repo.getSessionProjectId(sessionId);
+        await this.repo.upsertSession({ ...s, branch }, projectId);
+        this.emitFn("data:changed", { kind: "session" });
+      }
+    });
   }
 
   /** Start a harness run for a session id and register it. */

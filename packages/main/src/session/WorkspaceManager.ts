@@ -57,6 +57,7 @@ export class WorkspaceManager {
     sessionId: string,
     repoId: string,
     existing: Workspace[],
+    branchName?: string,
   ): Promise<{ workspace?: Workspace; error?: string }> {
     const already = existing.find((w) => w.repo === repoId && w.worktree);
     if (already) return { workspace: already };
@@ -66,7 +67,7 @@ export class WorkspaceManager {
 
     const root = this.ensureRoot(sessionId);
     const worktreePath = join(root, repoSlug(repoId));
-    const branch = this.branchFor(sessionId);
+    const branch = branchName ?? this.branchFor(sessionId);
 
     if (existsSync(worktreePath)) {
       // Left over from a previous run — reuse it.

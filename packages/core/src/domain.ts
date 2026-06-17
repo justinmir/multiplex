@@ -120,6 +120,9 @@ export interface Session {
   /** Messages queued while a turn is in progress; drained one at a time (FIFO)
    *  by the runtime, including for background sessions and across restarts. */
   queuedMessages?: string[];
+  /** The git branch this session's worktrees use (a short, human-readable name
+   *  derived from the prompt). Decided once, on first worktree creation. */
+  branch?: string;
   /** Optional per-session references the agent should consult. */
   references?: Reference[];
 }
