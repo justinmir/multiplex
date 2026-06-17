@@ -6,6 +6,7 @@ import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "../app/components/ui/resizable";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import { useSessionStream } from "../lib/session/useSessionStream.js";
@@ -250,7 +251,9 @@ export function AppShell() {
   const selectedProjectSessionId = view === "project" ? projectInitialSession : null;
 
   return (
-    <div className="dark flex h-screen w-full overflow-hidden bg-background font-sans text-foreground">
+    <div className="dark h-screen w-full overflow-hidden bg-background font-sans text-foreground">
+      <ResizablePanelGroup direction="horizontal" autoSaveId="multiplex:shell" className="h-full w-full">
+      <ResizablePanel order={1} defaultSize={18} minSize={12} maxSize={38} className="min-w-0">
       <ProjectsSidebar
         projects={projects}
         standaloneSessions={sessions}
@@ -271,6 +274,9 @@ export function AppShell() {
         onOpenCreateProject={() => setCreateProjectOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
       />
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel order={2} className="flex min-w-0">
       <main className="flex h-full min-w-0 flex-1">
         {view === "home" && (
           <HomeView
@@ -315,6 +321,8 @@ export function AppShell() {
           />
         )}
       </main>
+      </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* M6.4 — Consolidated settings panel */}
       <SettingsPanel open={settingsOpen} onOpenChange={(open) => setSettingsOpen(open)} />

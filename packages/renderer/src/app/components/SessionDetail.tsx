@@ -12,6 +12,7 @@ import { ReferenceRow } from "./tabs/ReferencesTab";
 import { formatRelativeTime } from "../../lib/format/time.js";
 import { Markdown } from "../../lib/markdown/Markdown.js";
 import { useStickToBottom } from "../../lib/session/useStickToBottom.js";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "./ui/resizable";
 
 interface Props {
   /** Optional parent project name. When set, shows a small breadcrumb above the title. */
@@ -104,6 +105,45 @@ export function SessionDetail({
     setRailOpen(true);
   };
 
+  // Conversation column (transcript + composer). Defined once so it renders the
+  // same whether the right rail is open (inside a resizable panel) or not.
+  const conversationColumn = (
+    <div className="flex h-full min-w-0 flex-1 flex-col">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+        {!session ? (
+          <NewSessionPane projectName={projectName} starterPrompts={starterPrompts} draft={draft} setDraft={setDraft} />
+        ) : (
+          <ConversationPane
+            session={session}
+            liveSteps={liveSteps}
+            changeFiles={allFiles}
+            totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)}
+            totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)}
+          />
+        )}
+      </div>
+      <Composer
+        session={session}
+        draft={draft}
+        setDraft={setDraft}
+        currentModel={currentModel ?? session?.model}
+        availableModels={availableModels}
+        onSelectModel={onSelectModel}
+        onAddReference={session && onAddReference ? () => { openRailAt("references"); setRefAddTick((t) => t + 1); } : undefined}
+        onSend={() => {
+          const v = draft.trim();
+          if (!v) return;
+          if (!session) {
+            onStartSession?.(v);
+          } else {
+            onSendMessage?.(v);
+          }
+          setDraft("");
+        }}
+      />
+    </div>
+  );
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {/* Top bar */}
@@ -156,49 +196,16 @@ export function SessionDetail({
         )}
       </div>
 
-      {/* Body: conversation + right rail */}
+      {/* Body: conversation + (resizable, persisted) right rail */}
       <div className="flex min-h-0 flex-1">
-        {/* Conversation column */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
-            {!session ? (
-              <NewSessionPane projectName={projectName} starterPrompts={starterPrompts} draft={draft} setDraft={setDraft} />
-            ) : (
-              <ConversationPane
-                session={session}
-                liveSteps={liveSteps}
-                changeFiles={allFiles}
-                totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)}
-                totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)}
-              />
-            )}
-          </div>
-          <Composer
-            session={session}
-            draft={draft}
-            setDraft={setDraft}
-            currentModel={currentModel ?? session?.model}
-            availableModels={availableModels}
-            onSelectModel={onSelectModel}
-            onAddReference={session && onAddReference ? () => { openRailAt("references"); setRefAddTick((t) => t + 1); } : undefined}
-            onSend={() => {
-              const v = draft.trim();
-              if (!v) return;
-              // For new sessions, delegate to onStartSession
-              if (!session) {
-                onStartSession?.(v);
-              } else {
-                // For existing sessions, send message text up to parent
-                onSendMessage?.(v);
-              }
-              setDraft("");
-            }}
-          />
-        </div>
-
-        {/* Right rail */}
-        {session && (railOpen ? (
-          <aside className="flex w-[400px] shrink-0 flex-col border-l border-border bg-card/30">
+        {session && railOpen ? (
+          <ResizablePanelGroup direction="horizontal" autoSaveId="multiplex:session" className="h-full w-full">
+            <ResizablePanel order={1} minSize={30} className="flex min-w-0">
+              {conversationColumn}
+            </ResizablePanel>
+            <ResizableHandle />
+            <ResizablePanel order={2} defaultSize={30} minSize={16} maxSize={55} className="flex min-w-0">
+          <aside className="flex h-full w-full min-w-0 flex-col bg-card/30">
             <div className="flex items-center gap-1 border-b border-border px-1 py-1">
               {railTabs.map((t) => {
                 const Icon = t.icon;
@@ -247,7 +254,12 @@ export function SessionDetail({
               {railTab === "references" && <ReferencesRail references={references} onAdd={onAddReference} openAddTick={refAddTick} />}
             </div>
           </aside>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : (
+          <>
+            {conversationColumn}
+            {session && (
           <aside className="flex w-10 shrink-0 flex-col items-center gap-1 border-l border-border bg-card/30 py-2">
             <button
               onClick={() => setRailOpen(true)}
@@ -276,7 +288,9 @@ export function SessionDetail({
               );
             })}
           </aside>
-        ))}
+            )}
+          </>
+        )}
       </div>
     </div>
   );

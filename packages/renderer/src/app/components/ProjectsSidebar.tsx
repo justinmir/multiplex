@@ -61,7 +61,7 @@ export function ProjectsSidebar({
     .filter((b) => b.items.length > 0);
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
+    <aside className="flex h-full w-full min-w-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 ring-1 ring-accent/40">
           <span className="font-mono text-[10px] text-accent">HX</span>
