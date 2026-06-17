@@ -629,8 +629,12 @@ export class SessionRuntime {
         // Flush the in-flight turn's buffered steps (thinking → tools → agent
         // reply) into the persisted transcript as one ordered batch.
         this.flushThinking(sessionId);
-        const buf = this.pendingTurn.get(sessionId);
-        if (buf && buf.length > 0) {
+        const buf = this.pendingTurn.get(sessionId) ?? [];
+        // A user-initiated stop ends with a clear notice rather than an error.
+        if (event.reason === "stopped") {
+          buf.push({ role: "agent", content: "⏹ You stopped the request.", ts: new Date().toISOString() });
+        }
+        if (buf.length > 0) {
           updated.messages = [...updated.messages, ...buf];
           persist = true;
         }

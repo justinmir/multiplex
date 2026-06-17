@@ -100,6 +100,7 @@ export class OpencodeHarness implements Harness {
     const abort = new AbortController();
     let turnFinished = false; // guards one completion per turn
     let terminated = false;   // guards server/SSE teardown
+    let stopping = false;     // user-initiated stop in progress (suppress error)
     let streamedText = "";    // accumulated deltas for the current turn (fallback)
     // opencode streams reasoning AND text as `message.part.delta { field:"text" }`;
     // the two are told apart only by the owning part's type, learned from the
@@ -132,7 +133,10 @@ export class OpencodeHarness implements Harness {
     };
 
     const fail = (message: string) => {
-      if (terminated) return;
+      // Aborting a turn makes opencode emit a session.error; when the stop was
+      // user-initiated, swallow it so the chat shows a clean "stopped" notice
+      // instead of an error.
+      if (terminated || stopping) return;
       onEvent({ type: "error", message, recoverable: false });
       onEvent({ type: "done", reason: "failed" });
       teardown();
@@ -212,6 +216,7 @@ export class OpencodeHarness implements Harness {
         await sendPrompt(baseUrl, sessionId, message, model);
       },
       async stop() {
+        stopping = true;
         await fetch(`${baseUrl}/session/${sessionId}/abort`, { method: "POST" }).catch(() => {});
         if (!terminated) onEvent({ type: "done", reason: "stopped" });
         teardown();
