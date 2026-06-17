@@ -6,6 +6,7 @@ import { TaskView } from "../app/components/TaskView";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
+import { AnalyticsView } from "../app/components/AnalyticsView";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "../app/components/ui/resizable";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
@@ -55,7 +56,7 @@ function NewSessionView({ onStart, onClose, currentModel, availableModels, onSel
   );
 }
 
-type View = "home" | "project" | "session" | "new-session";
+type View = "home" | "project" | "session" | "new-session" | "analytics";
 
 export function AppShell() {
   const projects = useProjects();
@@ -286,6 +287,7 @@ export function AppShell() {
         isProjectSessionUnread={(pid, sid) => unread.has(projectKey(pid, sid))}
         isStandaloneSessionUnread={(sid) => unread.has(standaloneKey(sid))}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenAnalytics={() => setView("analytics")}
         onOpenCreateProject={() => setCreateProjectOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
       />
@@ -339,6 +341,7 @@ export function AppShell() {
             onClose={() => setView("home")}
           />
         )}
+        {view === "analytics" && <AnalyticsView onClose={() => setView("home")} />}
       </main>
       </ResizablePanel>
       </ResizablePanelGroup>

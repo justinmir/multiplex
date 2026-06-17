@@ -4,6 +4,8 @@ import type { Repository } from "@app/core";
 import { handle } from "../ipc/router.js";
 import { JsonRepository } from "../repo/JsonRepository.js";
 import { registerRepoReadHandlers } from "../ipc/handlers/repo.js";
+import { registerAnalyticsHandlers } from "../ipc/handlers/analytics.js";
+import { setTokenRepo } from "../analytics/tokenTracker.js";
 import { registerRepoWriteHandlers } from "../ipc/handlers/writes.js";
 import { registerProjectWriteHandlers } from "../ipc/handlers/project-writes.js";
 import { registerGitHubAuthHandlers } from "../ipc/handlers/github-auth.js";
@@ -60,6 +62,8 @@ export function createIpcModule(): AppModule {
         repo = new JsonRepository();
       }
       registerRepoReadHandlers(repo);
+      setTokenRepo(repo); // route token-usage events to the repo
+      registerAnalyticsHandlers(repo);
 
       // M1.5: Repository write handlers (persist to disk)
       registerRepoWriteHandlers(repo);

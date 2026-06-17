@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
-import type { ActivityItem, Note, Project, Reference, RefScope, Session } from "@app/core";
+import type { ActivityItem, Note, Project, Reference, RefScope, Session, TokenUsageEvent } from "@app/core";
 import { InMemoryRepository } from "./InMemoryRepository.js";
 import { DB_PATH, ensureDir } from "./paths.js";
 import { seedProjects, seedStandaloneSessions, seedEnabled } from "./seed.js";
@@ -27,6 +27,7 @@ interface DbSnapshot {
   notes: NoteEntry[];
   references: ReferenceEntry[];
   activity: Record<string, ActivityItem[]>;
+  tokenUsage?: TokenUsageEvent[];
 }
 
 export class JsonRepository extends InMemoryRepository {
@@ -97,6 +98,8 @@ export class JsonRepository extends InMemoryRepository {
           this.activity.set(projectId, items);
         }
       }
+
+      this.tokenUsage = snap.tokenUsage ?? [];
     } catch (err) {
       // Corrupt JSON — backup and re-seed
       console.error(`[JsonRepository] corrupt db at ${this.dbPath}, seeding fresh.`, err);
@@ -205,7 +208,7 @@ export class JsonRepository extends InMemoryRepository {
       }
     }
 
-    return { version: 1, projects, standaloneSessions, notes, references, activity };
+    return { version: 1, projects, standaloneSessions, notes, references, activity, tokenUsage: this.tokenUsage };
   }
 
   private saveToDisk(): void {
@@ -281,6 +284,11 @@ export class JsonRepository extends InMemoryRepository {
 
   async archiveSession(id: string): Promise<void> {
     await super.archiveSession(id);
+    this.saveToDisk();
+  }
+
+  async recordTokenUsage(e: TokenUsageEvent): Promise<void> {
+    await super.recordTokenUsage(e);
     this.saveToDisk();
   }
 }

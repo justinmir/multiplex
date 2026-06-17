@@ -1,4 +1,4 @@
-import type { ActivityItem, Note, Project, Reference, Session } from "./domain.js";
+import type { ActivityItem, Note, Project, Reference, Session, TokenUsageEvent } from "./domain.js";
 
 /** Scoped access to references — either by project or by session. */
 export type RefScope = { projectId: string; sessionId?: never } | { sessionId: string; projectId?: never };
@@ -32,4 +32,9 @@ export interface Repository {
 
   // ---- archive ----
   archiveSession(id: string): Promise<void>;
+
+  // ---- token usage analytics (append-only time series) ----
+  recordTokenUsage(e: TokenUsageEvent): Promise<void>;
+  /** All usage events at/after `sinceMs` (default: all), oldest first. */
+  listTokenUsage(sinceMs?: number): Promise<TokenUsageEvent[]>;
 }

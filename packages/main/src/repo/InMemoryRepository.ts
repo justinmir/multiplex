@@ -1,4 +1,4 @@
-import type { ActivityItem, Note, Project, Reference, RefScope, Repository, Session } from "@app/core";
+import type { ActivityItem, Note, Project, Reference, RefScope, Repository, Session, TokenUsageEvent } from "@app/core";
 
 /** Build the map key for a reference given its scope. */
 function refKey(scope: RefScope, refId: string): string {
@@ -19,6 +19,7 @@ export class InMemoryRepository implements Repository {
   protected notes = new Map<string, Note>();            // key: `${projectId}::${noteId}`
   protected references = new Map<string, Reference>();   // key varies by scope (see refKey)
   protected activity = new Map<string, ActivityItem[]>(); // projectId -> items[]
+  protected tokenUsage: TokenUsageEvent[] = [];           // append-only usage series
 
   private counter = 0;
 
@@ -192,6 +193,16 @@ export class InMemoryRepository implements Repository {
     const s = this.sessions.get(id);
     if (!s) return;
     this.sessions.set(id, { ...s, archived: true });
+  }
+
+  async recordTokenUsage(e: TokenUsageEvent): Promise<void> {
+    this.tokenUsage.push(e);
+    // Bound the series so it can't grow without limit.
+    if (this.tokenUsage.length > 50_000) this.tokenUsage = this.tokenUsage.slice(-50_000);
+  }
+
+  async listTokenUsage(sinceMs = 0): Promise<TokenUsageEvent[]> {
+    return this.tokenUsage.filter((e) => e.ts >= sinceMs).sort((a, b) => a.ts - b.ts).map((e) => ({ ...e }));
   }
 
   /** Synchronously list standalone sessions (no project), hydrated with references. */

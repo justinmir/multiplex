@@ -5,6 +5,7 @@ import { registerBuiltInHarnesses } from "../harness/index.js";
 import { deriveSessionStatusFromEvent } from "./statusMap.js";
 import { deriveSessionStatus as applyDerivedFn } from "./deriveStatus.js";
 import { generateSessionTitle, generateBranchName } from "./sessionTitle.js";
+import { recordSessionTokens } from "../analytics/tokenTracker.js";
 import type { WorkspaceManager } from "./WorkspaceManager.js";
 import { pushBranch } from "../git/push.js";
 import { assembleProjectContext } from "../intelligence/assembleContext.js";
@@ -892,6 +893,7 @@ export class SessionRuntime {
         if (event.tokens !== undefined) updated.tokens += event.tokens;
         if (event.costUsd !== undefined) updated.cost = Math.round((updated.cost + event.costUsd) * 100) / 100;
         if (event.durationMs !== undefined) updated.durationMin = Math.max(updated.durationMin, Math.ceil(event.durationMs / 60_000));
+        recordSessionTokens(sessionId, event.tokens ?? 0, event.costUsd ?? 0);
         persist = true;
         break;
       }

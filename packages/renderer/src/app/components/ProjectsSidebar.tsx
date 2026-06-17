@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Search, Plus, Settings, Home, ChevronRight, ChevronDown,
-  Archive, ArchiveRestore, GitPullRequest,
+  Archive, ArchiveRestore, GitPullRequest, BarChart3,
 } from "lucide-react";
 import { Project, Session, bucketForSession, sessionWindowLabels, SessionWindow } from "../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
@@ -14,7 +14,7 @@ interface Props {
   selectedProjectId: string;
   selectedSessionId: string | null;
   selectedProjectSessionId: string | null;
-  view: "home" | "project" | "session" | "new-session";
+  view: "home" | "project" | "session" | "new-session" | "analytics";
   githubConnected?: boolean;
   onGoHome: () => void;
   onSelectProject: (id: string) => void;
@@ -26,6 +26,8 @@ interface Props {
   isStandaloneSessionUnread: (sessionId: string) => boolean;
   /** M4.2 — callback to open the Settings dialog */
   onOpenSettings: () => void;
+  /** Open the token-usage analytics page. */
+  onOpenAnalytics?: () => void;
   /** M5.2 — callback to open the Create Project dialog */
   onOpenCreateProject?: () => void;
   /** M6.3 — open the global search (⌘K) palette */
@@ -40,6 +42,7 @@ export function ProjectsSidebar({
   onNewSession, onArchiveSession,
   isProjectSessionUnread, isStandaloneSessionUnread,
   onOpenSettings,
+  onOpenAnalytics,
   onOpenCreateProject,
   onOpenSearch,
 }: Props) {
@@ -273,12 +276,21 @@ export function ProjectsSidebar({
       </div>
 
       <div className="border-t border-border px-3 py-2.5">
-        <button
-          onClick={onOpenSettings}
-          className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-[12px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-        >
-          <Settings className="h-3.5 w-3.5" /> Settings
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenSettings}
+            className="flex flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-[12px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Settings className="h-3.5 w-3.5" /> Settings
+          </button>
+          <button
+            onClick={onOpenAnalytics}
+            title="Token usage"
+            className="rounded-sm p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {/* GitHub connection status */}
         {githubConnected !== undefined && !githubConnected && (
           <button

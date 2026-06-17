@@ -46,6 +46,7 @@ export async function generateSessionTitle(prompt: string, model?: string): Prom
       system: TITLE_SYSTEM,
       prompt: buildPrompt(trimmed.slice(0, 2000)),
       timeoutMs: 30_000,
+      operation: "title",
     });
     return cleanTitle(raw);
   } catch {
@@ -107,6 +108,7 @@ export async function generateBranchName(prompt: string, model?: string): Promis
       system: BRANCH_SYSTEM,
       prompt: buildBranchPrompt(trimmed.slice(0, 2000)),
       timeoutMs: 30_000,
+      operation: "branch",
     });
     return cleanBranch(raw);
   } catch {

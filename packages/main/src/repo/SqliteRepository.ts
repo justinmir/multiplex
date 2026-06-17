@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
-  ActivityItem, Note, Project, Reference, RefScope, Repository, Session,
+  ActivityItem, Note, Project, Reference, RefScope, Repository, Session, TokenUsageEvent,
 } from "@app/core";
 import { seedProjects, seedStandaloneSessions, seedEnabled } from "./seed.js";
 
@@ -34,8 +34,10 @@ export class SqliteRepository implements Repository {
       CREATE TABLE IF NOT EXISTS notes (project_id TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (project_id, id));
       CREATE TABLE IF NOT EXISTS refs (scope_type TEXT NOT NULL, scope_id TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (scope_type, scope_id, id));
       CREATE TABLE IF NOT EXISTS activity (project_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS token_usage (ts INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
       CREATE INDEX IF NOT EXISTS idx_activity_project ON activity(project_id);
+      CREATE INDEX IF NOT EXISTS idx_token_usage_ts ON token_usage(ts);
     `);
 
     const empty = (this.db.prepare("SELECT COUNT(*) AS n FROM projects").get() as { n: number }).n === 0
@@ -266,6 +268,15 @@ export class SqliteRepository implements Repository {
     if (!row) return;
     const s = JSON.parse(row.data) as Session;
     this.putSession({ ...s, archived: true }, row.project_id);
+  }
+
+  async recordTokenUsage(e: TokenUsageEvent): Promise<void> {
+    this.db.prepare("INSERT INTO token_usage(ts, data) VALUES(?, ?)").run(e.ts, JSON.stringify(e));
+  }
+
+  async listTokenUsage(sinceMs = 0): Promise<TokenUsageEvent[]> {
+    const rows = this.db.prepare("SELECT data FROM token_usage WHERE ts >= ? ORDER BY ts").all(sinceMs) as { data: string }[];
+    return rows.map((r) => JSON.parse(r.data) as TokenUsageEvent);
   }
 
   /** Close the database (called on shutdown). */

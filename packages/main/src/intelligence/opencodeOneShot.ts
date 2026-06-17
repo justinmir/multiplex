@@ -1,5 +1,6 @@
 import os from "node:os";
 import { OpenCodeServerManager } from "../harness/server.js";
+import { recordAppTokens } from "../analytics/tokenTracker.js";
 
 const DISABLED_TOOLS = ["write", "edit", "patch", "bash", "read", "list", "glob", "grep", "webfetch", "websearch", "task", "todowrite", "skill"];
 
@@ -10,15 +11,21 @@ function parseModel(model?: string): { providerID: string; modelID: string } | u
   return { providerID: model.slice(0, i), modelID: model.slice(i + 1) };
 }
 
-/** Read + concatenate the text parts of the most recent assistant message. */
-async function readLastAssistantText(base: string, sessionId: string): Promise<string> {
+interface AssistantMsg {
+  info?: { role?: string; tokens?: { total?: number }; cost?: number };
+  parts?: Array<{ type: string; text?: string }>;
+}
+
+/** Read the most recent assistant message's text + token usage. */
+async function readLastAssistant(base: string, sessionId: string): Promise<{ text: string; tokens: number; cost: number }> {
   const resp = await fetch(`${base}/session/${sessionId}/message`);
-  if (!resp.ok) return "";
-  const messages = (await resp.json()) as Array<{ info?: { role?: string }; parts?: Array<{ type: string; text?: string }> }>;
+  if (!resp.ok) return { text: "", tokens: 0, cost: 0 };
+  const messages = (await resp.json()) as AssistantMsg[];
   const assistants = messages.filter((m) => m.info?.role === "assistant");
   const last = assistants[assistants.length - 1];
-  if (!last) return "";
-  return (last.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
+  if (!last) return { text: "", tokens: 0, cost: 0 };
+  const text = (last.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
+  return { text, tokens: last.info?.tokens?.total ?? 0, cost: last.info?.cost ?? 0 };
 }
 
 /** Stream `/event` until our session goes idle (or errors), then resolve.
@@ -73,6 +80,8 @@ export async function runOpencodePrompt(opts: {
   system?: string;
   prompt: string;
   timeoutMs?: number;
+  /** Label this one-shot's token usage as an app operation (for analytics). */
+  operation?: string;
 }): Promise<string> {
   const mgr = new OpenCodeServerManager();
   await mgr.start(opts.binPath, os.tmpdir());
@@ -121,7 +130,9 @@ export async function runOpencodePrompt(opts: {
     // Stop the SSE stream cleanly (idle already returned + cancelled its reader).
     abort.abort();
     await idle.catch(() => {});
-    return await readLastAssistantText(base, sessionId);
+    const { text, tokens, cost } = await readLastAssistant(base, sessionId);
+    if (opts.operation) recordAppTokens(opts.operation, tokens, cost);
+    return text;
   } finally {
     abort.abort();
     await mgr.stop();

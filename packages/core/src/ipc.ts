@@ -1,4 +1,4 @@
-import type { CheckRun, FileChange, Note, Project, PullRequest, Reference, Session, SessionStatus } from "./domain.js";
+import type { CheckRun, FileChange, Note, Project, PullRequest, Reference, Session, SessionStatus, TokenUsageEvent } from "./domain.js";
 import type { RefScope } from "./repository.js";
 
 export const EVENT_CHANNEL = "multiplex:event" as const;
@@ -93,6 +93,8 @@ export interface IpcContract {
   "project:resynthesize": { req: { projectId: string }; res: { summary: string; nextSteps: string[]; synthesizedAtMs: number } | null };
   // Suggested session prompts for the project-less "new session" view.
   "suggestions:global": { req: void; res: string[] };
+  // Token-usage analytics: events at/after `sinceMs` (oldest first).
+  "analytics:tokens": { req: { sinceMs?: number }; res: TokenUsageEvent[] };
 }
 
 export interface AppSettingsData {

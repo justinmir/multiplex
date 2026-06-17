@@ -126,9 +126,10 @@ export class OpencodeHarness implements Harness {
       turnFinished = true;
       // Prefer the authoritative server-side message; fall back to the text we
       // streamed so the reply is never lost if the fetch comes back empty.
-      const fetched = await this.readLastAssistantText(baseUrl, sessionId).catch(() => "");
-      const text = fetched || streamedText.trim();
+      const fetched = await this.readLastAssistant(baseUrl, sessionId).catch(() => ({ text: "", tokens: 0, cost: 0 }));
+      const text = fetched.text || streamedText.trim();
       if (text) onEvent({ type: "message", role: "agent", content: text, final: true });
+      if (fetched.tokens > 0 || fetched.cost > 0) onEvent({ type: "usage", tokens: fetched.tokens, costUsd: fetched.cost });
       onEvent({ type: "done", reason: "completed" });
     };
 
@@ -252,13 +253,19 @@ export class OpencodeHarness implements Harness {
 
   /** Read + concatenate the text parts of the most recent assistant message. */
   private async readLastAssistantText(baseUrl: string, sessionId: string): Promise<string> {
+    return (await this.readLastAssistant(baseUrl, sessionId)).text;
+  }
+
+  /** The most recent assistant message's text + token usage for the turn. */
+  private async readLastAssistant(baseUrl: string, sessionId: string): Promise<{ text: string; tokens: number; cost: number }> {
     const resp = await fetch(`${baseUrl}/session/${sessionId}/message`);
-    if (!resp.ok) return "";
-    const messages = (await resp.json()) as Array<{ info?: { role?: string }; parts?: Array<{ type: string; text?: string }> }>;
+    if (!resp.ok) return { text: "", tokens: 0, cost: 0 };
+    const messages = (await resp.json()) as Array<{ info?: { role?: string; tokens?: { total?: number }; cost?: number }; parts?: Array<{ type: string; text?: string }> }>;
     const assistants = messages.filter((m) => m.info?.role === "assistant");
     const last = assistants[assistants.length - 1];
-    if (!last) return "";
-    return (last.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
+    if (!last) return { text: "", tokens: 0, cost: 0 };
+    const text = (last.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("").trim();
+    return { text, tokens: last.info?.tokens?.total ?? 0, cost: last.info?.cost ?? 0 };
   }
 
   /** Stream and parse the SSE `/event` endpoint, dispatching each parsed event. */

@@ -26,6 +26,16 @@ export interface Reference {
   addedBy?: string;
 }
 
+/** One token-usage data point, for per-session and application-wide analytics. */
+export interface TokenUsageEvent {
+  ts: number;                      // epoch ms
+  source: "session" | "app";
+  sessionId?: string;              // set when source === "session"
+  operation?: string;             // set when source === "app" (e.g. "title", "synthesis")
+  tokens: number;
+  costUsd: number;
+}
+
 export interface FileChange {
   path: string;
   additions: number;

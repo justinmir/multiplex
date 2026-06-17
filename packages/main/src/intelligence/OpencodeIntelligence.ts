@@ -66,6 +66,7 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       model: this.getModel(),
       system: SUMMARY_SYSTEM,
       prompt: buildSummaryPrompt(input),
+      operation: "synthesis",
     });
 
     const parsed = extractJson(raw) as { summary?: unknown; nextSteps?: unknown; suggestedPrompts?: unknown } | null;
@@ -92,6 +93,7 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       system: GLOBAL_PROMPTS_SYSTEM,
       prompt: overview,
       timeoutMs: 45_000,
+      operation: "suggestions",
     });
     const parsed = extractJson(raw) as { prompts?: unknown } | null;
     const prompts = Array.isArray(parsed?.prompts)
@@ -112,6 +114,7 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       system: REFERENCE_SYSTEM,
       prompt,
       timeoutMs: 45_000,
+      operation: "reference",
     });
     return raw.replace(/^["'\s]+|["'\s]+$/g, "").split("\n")[0].slice(0, 200);
   }
