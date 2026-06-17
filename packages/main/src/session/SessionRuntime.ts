@@ -89,7 +89,11 @@ export class SessionRuntime {
     if (!this.workspaces) return [];
     const session = await this.repo.getSession(sessionId);
     if (!session) return [];
-    return this.workspaces.diffAll(session.workspaces);
+    const repoDiffs = await this.workspaces.diffAll(session.workspaces);
+    // Also surface loose files written to the session root (e.g. a standalone
+    // script when no repo is in scope) so they show up in Changes.
+    const loose = this.workspaces.looseRootChanges(sessionId, session.workspaces);
+    return loose ? [...repoDiffs, loose] : repoDiffs;
   }
 
   /**

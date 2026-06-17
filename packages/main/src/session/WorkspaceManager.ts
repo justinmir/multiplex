@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { join } from "node:path";
 import type { GitService, Workspace, FileChange } from "@app/core";
 import type { RepoRegistry } from "../git/RepoRegistry.js";
@@ -79,6 +80,55 @@ export class WorkspaceManager {
     } catch (err) {
       return { error: err instanceof Error ? err.message : `Failed to create worktree for ${repoId}` };
     }
+  }
+
+  /**
+   * Files written directly into the session root (not inside a repo worktree) —
+   * e.g. a standalone script when no repo is in scope. The root isn't a git
+   * repo, so these are surfaced as "added" with their content so they still show
+   * up in Changes. Worktree subdirs and harness/config files are excluded.
+   */
+  looseRootChanges(sessionId: string, workspaces: Workspace[]): { repo: string; files: FileChange[] } | null {
+    const root = this.rootFor(sessionId);
+    if (!existsSync(root)) return null;
+    const worktreePaths = new Set(workspaces.map((w) => w.worktree).filter((p): p is string => !!p));
+    const skip = new Set(["node_modules", "opencode.json"]);
+    const files: FileChange[] = [];
+    const MAX_FILES = 200;
+    const MAX_BYTES = 64 * 1024;
+
+    const walk = (dir: string, rel: string): void => {
+      if (files.length >= MAX_FILES) return;
+      let entries: Dirent[];
+      try { entries = readdirSync(dir, { withFileTypes: true }) as Dirent[]; } catch { return; }
+      for (const e of entries) {
+        if (files.length >= MAX_FILES) break;
+        if (e.name.startsWith(".") || skip.has(e.name)) continue;
+        const abs = join(dir, e.name);
+        if (worktreePaths.has(abs)) continue; // a repo worktree — handled by diffAll
+        const relPath = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) {
+          walk(abs, relPath);
+        } else if (e.isFile()) {
+          let content: string;
+          try {
+            if (statSync(abs).size > MAX_BYTES) { content = "(file too large to preview)"; }
+            else content = readFileSync(abs, "utf-8");
+          } catch { continue; }
+          if (content.includes("\u0000")) content = "(binary file)";
+          const lines = content.split("\n");
+          files.push({
+            path: relPath,
+            kind: "added",
+            additions: lines.length,
+            deletions: 0,
+            hunk: lines.map((l) => `+${l}`).join("\n"),
+          });
+        }
+      }
+    };
+    walk(root, "");
+    return files.length > 0 ? { repo: "workspace", files } : null;
   }
 
   /** Diff every materialized worktree, grouped by repo. */
