@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Search, Plus, Settings, Home, ChevronRight, ChevronDown,
   Archive, ArchiveRestore, GitPullRequest, BarChart3,
@@ -7,6 +7,7 @@ import { Project, Session, bucketForSession, sessionWindowLabels, SessionWindow 
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { formatRelativeTime } from "../../lib/format/time.js";
 import { call } from "../../lib/ipc/client.js";
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "./ui/context-menu";
 
 interface Props {
   projects: Project[];
@@ -32,9 +33,38 @@ interface Props {
   onOpenCreateProject?: () => void;
   /** M6.3 — open the global search (⌘K) palette */
   onOpenSearch?: () => void;
+  /** Right-click actions. */
+  onEditProject?: (project: Project) => void;
+  onRenameSession?: (session: Session) => void;
 }
 
 const windowOrder: SessionWindow[] = ["last_24h", "last_7d", "last_30d", "older", "archived"];
+
+/** Wrap a project row with a right-click menu (Edit Project). */
+function ProjectMenu({ project, onEditProject, children }: { project: Project; onEditProject?: (p: Project) => void; children: ReactNode }) {
+  if (!onEditProject) return <>{children}</>;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => onEditProject(project)}>Edit Project</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** Wrap a session row with a right-click menu (Rename Session). */
+function SessionMenu({ session, onRenameSession, children }: { session: Session; onRenameSession?: (s: Session) => void; children: ReactNode }) {
+  if (!onRenameSession) return <>{children}</>;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => onRenameSession(session)}>Rename Session</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
 
 export function ProjectsSidebar({
   projects, standaloneSessions, selectedProjectId, selectedSessionId, selectedProjectSessionId, view, githubConnected,
@@ -43,6 +73,8 @@ export function ProjectsSidebar({
   isProjectSessionUnread, isStandaloneSessionUnread,
   onOpenSettings,
   onOpenAnalytics,
+  onEditProject,
+  onRenameSession,
   onOpenCreateProject,
   onOpenSearch,
 }: Props) {
@@ -126,6 +158,7 @@ export function ProjectsSidebar({
             const expanded = !!expandedProjects[p.id];
             return (
               <div key={p.id}>
+                <ProjectMenu project={p} onEditProject={onEditProject}>
                 <div className={`group flex w-full items-center gap-0.5 rounded-md ${isSel ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
                   <button
                     onClick={() => toggleExpand(p.id)}
@@ -146,6 +179,7 @@ export function ProjectsSidebar({
                     )}
                   </button>
                 </div>
+                </ProjectMenu>
 
                 {/* Inline sessions under expanded project */}
                 {expanded && (
@@ -158,8 +192,8 @@ export function ProjectsSidebar({
                         .map((s) => {
                           const isSelected = selectedProjectSessionId === s.id && selectedProjectId === p.id && view === "project";
                           return (
+                            <SessionMenu key={s.id} session={s} onRenameSession={onRenameSession}>
                             <button
-                              key={s.id}
                               onClick={() => onOpenProjectSession(p.id, s.id)}
                               className={`group flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition-colors ${
                                 isSelected ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"
@@ -178,6 +212,7 @@ export function ProjectsSidebar({
                                 <SessionStateIndicator status={s.status} size={10} />
                               </span>
                             </button>
+                            </SessionMenu>
                           );
                         })
                     )}
@@ -231,8 +266,8 @@ export function ProjectsSidebar({
                     {bucket.items.map((s) => {
                       const isSel = view === "session" && s.id === selectedSessionId;
                       return (
+                        <SessionMenu key={s.id} session={s} onRenameSession={onRenameSession}>
                         <div
-                          key={s.id}
                           className={`group flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors ${
                             isSel ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"
                           }`}
@@ -265,6 +300,7 @@ export function ProjectsSidebar({
                             {s.archived ? <ArchiveRestore className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
                           </button>
                         </div>
+                        </SessionMenu>
                       );
                     })}
                   </div>

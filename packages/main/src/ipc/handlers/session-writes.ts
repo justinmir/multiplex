@@ -61,6 +61,17 @@ export function registerSessionWriteHandlers(repo: Repository) {
     return session;
   });
 
+  // Rename a session (title only) — standalone or project-linked.
+  handle("sessions:rename", async (req) => {
+    const existing = await repo.getSession(req.sessionId);
+    if (!existing) throw new Error(`Session not found: ${req.sessionId}`);
+    const title = req.title.trim();
+    if (!title) return;
+    const projectId = await repo.getSessionProjectId(req.sessionId);
+    await repo.upsertSession({ ...existing, title }, projectId);
+    emit("data:changed", { kind: "session" });
+  });
+
   // Update a session's status — works for both standalone and project-linked sessions
   handle("sessions:update-status", async (req) => {
     const existing = await repo.getSession(req.sessionId);

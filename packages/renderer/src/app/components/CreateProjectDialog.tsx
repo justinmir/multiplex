@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -14,13 +14,25 @@ interface Props {
   /** Called with the new project's id after a successful create, so the caller
    *  can open it immediately. */
   onCreated?: (projectId: string) => void;
+  /** When set, the dialog edits this project's name + description instead of
+   *  creating a new one. */
+  editProject?: Project | null;
 }
 
-export function CreateProjectDialog({ open, onOpenChange, onCreated }: Props) {
+export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject }: Props) {
   const mutations = useDataMutations();
+  const isEditing = !!editProject;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Initialize the form from the project being edited (or blank) when opened.
+  useEffect(() => {
+    if (open) {
+      setName(editProject?.name ?? "");
+      setDescription(editProject && editProject.description !== "No description provided." ? editProject.description : "");
+    }
+  }, [open, editProject]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,43 +40,48 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: Props) {
     if (!name.trim() || submitting) return;
 
     const now = new Date().toISOString();
-    const project: Project = {
-      id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      name: name.trim(),
-      slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-      description: description.trim() || "No description provided.",
-      repos: [],
-      status: "active",
-      color: "#6366f1",
-      progress: 0,
-      openPRs: 0,
-      activeSessions: 0,
-      lastActivity: now,
-      prs: [] as PullRequest[],
-      sessions: [] as Session[],
-      notes: [] as Note[],
-      references: [] as Reference[],
-      activity: [] as ActivityItem[],
-      summary: "",
-      nextSteps: [],
-    };
+    const project: Project = editProject
+      ? {
+          ...editProject,
+          name: name.trim(),
+          slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+          description: description.trim() || "No description provided.",
+        }
+      : {
+          id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: name.trim(),
+          slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+          description: description.trim() || "No description provided.",
+          repos: [],
+          status: "active",
+          color: "#6366f1",
+          progress: 0,
+          openPRs: 0,
+          activeSessions: 0,
+          lastActivity: now,
+          prs: [] as PullRequest[],
+          sessions: [] as Session[],
+          notes: [] as Note[],
+          references: [] as Reference[],
+          activity: [] as ActivityItem[],
+          summary: "",
+          nextSteps: [],
+        };
 
     setSubmitting(true);
     try {
       await mutations.upsertProject(project);
-      // Reset form, close, and open the new project immediately.
       setName("");
       setDescription("");
       onOpenChange(false);
-      onCreated?.(project.id);
+      if (!isEditing) onCreated?.(project.id);
     } catch (err) {
-      console.error("Failed to create project:", err);
+      console.error("Failed to save project:", err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Reset form when dialog opens fresh
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen && !submitting) {
       setName("");
@@ -77,9 +94,9 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: Props) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create Project</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Project" : "Create Project"}</DialogTitle>
           <DialogDescription>
-            Add a new project to organize sessions and notes.
+            {isEditing ? "Update the project name and description." : "Add a new project to organize sessions and notes."}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,10 +145,10 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: Props) {
               {submitting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Creating…
+                  {isEditing ? "Saving…" : "Creating…"}
                 </>
               ) : (
-                "Create Project"
+                isEditing ? "Save" : "Create Project"
               )}
             </Button>
           </DialogFooter>

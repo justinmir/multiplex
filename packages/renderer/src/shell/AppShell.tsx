@@ -6,12 +6,13 @@ import { LiveSession } from "../app/components/LiveSession";
 import { SessionDetail } from "../app/components/SessionDetail";
 import { SettingsPanel } from "./SettingsPanel.js";
 import { CreateProjectDialog } from "../app/components/CreateProjectDialog";
+import { RenameSessionDialog } from "../app/components/RenameSessionDialog";
 import { AnalyticsView } from "../app/components/AnalyticsView";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "../app/components/ui/resizable";
 import { SearchPalette } from "../lib/search/SearchPalette.js";
 import { useDataMutations, useDataLoading, useProjects, useStandaloneSessions } from "../lib/data/DataProvider.js";
 import { useHarnessInfo } from "../lib/session/useHarnessInfo.js";
-import type { Session, AppSettingsData } from "@app/core";
+import type { Session, Project, AppSettingsData } from "@app/core";
 import { sessionStateInfo } from "../app/components/SessionStateBadge";
 import { call } from "../lib/ipc/client.js";
 
@@ -72,6 +73,9 @@ export function AppShell() {
 
   // M5.2 — Create project dialog state
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  // Context-menu editing state (Edit Project / Rename Session).
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [renamingSession, setRenamingSession] = useState<Session | null>(null);
 
   // M6.3 — Global search palette (⌘K)
   const [searchOpen, setSearchOpen] = useState(false);
@@ -198,6 +202,8 @@ export function AppShell() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenAnalytics={() => setView("analytics")}
         onOpenCreateProject={() => setCreateProjectOpen(true)}
+        onEditProject={(p) => setEditingProject(p)}
+        onRenameSession={(s) => setRenamingSession(s)}
         onOpenSearch={() => setSearchOpen(true)}
       />
       </ResizablePanel>
@@ -239,6 +245,12 @@ export function AppShell() {
 
       {/* M5.2 — Create project dialog */}
       <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} onCreated={(id) => openProject(id, null)} />
+
+      {/* Edit Project (from right-click) */}
+      <CreateProjectDialog open={!!editingProject} onOpenChange={(o) => { if (!o) setEditingProject(null); }} editProject={editingProject} />
+
+      {/* Rename Session (from right-click) */}
+      <RenameSessionDialog session={renamingSession} onOpenChange={(o) => { if (!o) setRenamingSession(null); }} />
 
       {/* M6.3 — Global search palette (⌘K) */}
       <SearchPalette

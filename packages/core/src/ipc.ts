@@ -23,6 +23,7 @@ export interface IpcContract {
   // M3.1 — Session CRUD (create + status update)
   "sessions:create": { req: { session: Session; projectId?: string }; res: Session };
   "sessions:update-status": { req: { sessionId: string; status: SessionStatus }; res: void };
+  "sessions:rename": { req: { sessionId: string; title: string }; res: void };
 
   // M2.2 — GitHub OAuth + connection status (the token never leaves main)
   "github:connect": { req: void; res: { success: boolean } };

@@ -120,6 +120,10 @@ export class IpcDataSource implements DataSource {
     return call("session:edit-prompt", { sessionId, prompt });
   }
 
+  async renameSession(sessionId: string, title: string): Promise<void> {
+    return call("sessions:rename", { sessionId, title });
+  }
+
   // ---- M-A8 — Harness health + model list ----
 
   async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {

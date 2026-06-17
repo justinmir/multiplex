@@ -86,6 +86,8 @@ interface DataMutationValue {
   removeQueuedMessage(sessionId: string, index: number): Promise<void>;
   /** Replace the last user prompt and re-run it. */
   editSessionPrompt(sessionId: string, prompt: string): Promise<void>;
+  /** Rename a session. */
+  renameSession(sessionId: string, title: string): Promise<void>;
 
   // M-A8 — Harness health + model list
   /** Check harness health. */
@@ -524,6 +526,11 @@ export function DataProvider({
     async editSessionPrompt(sessionId: string, prompt: string): Promise<void> {
       try { await activeSource.editSessionPrompt(sessionId, prompt); }
       catch (err) { console.error("Failed to edit prompt:", err); }
+    },
+
+    async renameSession(sessionId: string, title: string): Promise<void> {
+      try { await activeSource.renameSession(sessionId, title); }
+      catch (err) { console.error("Failed to rename session:", err); }
     },
 
     // ---- M-A8 — Harness health + model list ----
