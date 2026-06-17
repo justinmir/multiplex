@@ -55,6 +55,7 @@ export interface IpcContract {
   // M4.3 — PR merge + external links
   "prs:merge": { req: { owner: string; repo: string; prNumber: number }; res: { success: boolean } };
   "app:open-url": { req: { url: string }; res: void };
+  "app:version": { req: void; res: { version: string; isPackaged: boolean } };
 
   // M6.3 — Global search over real projects, sessions, and PRs
   "search:query": { req: { q: string }; res: Array<{ kind: "project" | "session" | "pr"; id: string; title: string; subtitle?: string; projectId?: string; status?: SessionStatus }> };

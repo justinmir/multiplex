@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search, Plus, Settings, Home, ChevronRight, ChevronDown,
   Archive, ArchiveRestore, GitPullRequest,
@@ -6,6 +6,7 @@ import {
 import { Project, Session, bucketForSession, sessionWindowLabels, SessionWindow } from "../data/mockData";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { formatRelativeTime } from "../../lib/format/time.js";
+import { call } from "../../lib/ipc/client.js";
 
 interface Props {
   projects: Project[];
@@ -46,6 +47,13 @@ export function ProjectsSidebar({
     [selectedProjectId]: true,
   });
   const [archivedOpen, setArchivedOpen] = useState(false);
+  // Real app version for packaged releases; "dev" for unpackaged/dev runs.
+  const [versionLabel, setVersionLabel] = useState("dev");
+  useEffect(() => {
+    call("app:version", undefined as never)
+      .then(({ version, isPackaged }) => setVersionLabel(isPackaged ? `v${version}` : "dev"))
+      .catch(() => { /* keep "dev" */ });
+  }, []);
 
   const toggleExpand = (id: string) =>
     setExpandedProjects((p) => ({ ...p, [id]: !p[id] }));
@@ -67,7 +75,7 @@ export function ProjectsSidebar({
           <span className="font-mono text-[10px] text-accent">MX</span>
         </div>
         <span className="font-display text-[17px] tracking-tight text-foreground">Multiplex</span>
-        <span className="ml-auto font-mono text-[10px] text-muted-foreground">v0.4.2</span>
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{versionLabel}</span>
       </div>
 
       <div className="px-3 pb-3">
