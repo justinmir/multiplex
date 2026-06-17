@@ -57,6 +57,9 @@ export interface HarnessRun {
   send(message: string): Promise<void>;
   stop(): Promise<void>;
   dispose(): void;
+  /** Whether the agent is genuinely still working (used by crash detection to
+   *  avoid killing a long-but-silent turn). Omitted = unknown. */
+  isBusy?(): Promise<boolean>;
 }
 
 export interface Harness {

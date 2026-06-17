@@ -21,7 +21,9 @@ export interface ConcurrencyConfig {
 const DEFAULT_CONCURRENCY: ConcurrencyConfig = {
   maxConcurrentSessions: 10,
   crashDetectionIntervalMs: 30_000,
-  crashTimeoutMs: 60_000,
+  // Generous: a legitimately-busy agent (long tool/model op) can be silent for a
+  // while. We also consult the harness's isBusy() before declaring a crash.
+  crashTimeoutMs: 300_000,
 };
 
 /** Create the harness instance for the current settings. */
@@ -748,6 +750,17 @@ export class SessionRuntime {
       }
 
       const run = this.runs.get(sessionId);
+      // A long-but-silent turn (e.g. a slow tool or model op) is NOT a crash —
+      // if the harness still reports the session as busy, leave it running.
+      if (run?.isBusy) {
+        try {
+          if (await run.isBusy()) {
+            this.lastActivity.set(sessionId, Date.now());
+            return;
+          }
+        } catch { /* fall through to treat as crashed */ }
+      }
+
       if (run) {
         // Try to stop the crashed session gracefully first
         try { await run.stop(); } catch { /* ignore */ }

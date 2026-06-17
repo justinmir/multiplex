@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProjectsSidebar } from "../app/components/ProjectsSidebar";
 import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
@@ -107,9 +107,14 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Initialize selected project and unread state once when data first loads
+  // Initialize selected project and unread state ONCE when data first loads.
+  // Previously this ran on every data:changed reload, which reset the selected
+  // project back to projects[0] (yanking the user between projects) and clobbered
+  // read state. Guard it so it only runs on the first populated load.
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (projects.length > 0) {
+    if (!initializedRef.current && projects.length > 0) {
+      initializedRef.current = true;
       setSelectedProjectId(projects[0].id);
       setUnread(computeInitialUnread(projects, dataSessions));
     }

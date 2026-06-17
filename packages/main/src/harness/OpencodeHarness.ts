@@ -222,6 +222,19 @@ export class OpencodeHarness implements Harness {
         if (!terminated) onEvent({ type: "done", reason: "stopped" });
         teardown();
       },
+      async isBusy() {
+        // opencode reports `{ "<sid>": { type: "busy" } }` only while working — a
+        // long-but-silent turn is still busy and must not be treated as crashed.
+        if (terminated) return false;
+        try {
+          const resp = await fetch(`${baseUrl}/session/status`);
+          if (!resp.ok) return false;
+          const status = (await resp.json()) as Record<string, { type?: string } | undefined>;
+          return status[sessionId]?.type === "busy";
+        } catch {
+          return false;
+        }
+      },
       dispose() {
         // Synchronous kill — app quit can't await graceful shutdown.
         if (terminated) return;
