@@ -22,14 +22,19 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   // GitHub: the token never crosses IPC; we only track connection status here,
   // and the token input is write-only.
   const [githubConnected, setGithubConnected] = useState(false);
+  const [oauthAvailable, setOauthAvailable] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [connectedLogin, setConnectedLogin] = useState<string | null>(null);
   // M-A8: Harness state with dynamic model list and health status
   const { info: harnessInfo, loading: harnessLoading, refresh: refreshHarness } = useHarnessInfo(settings?.harnessId, open && !!settings);
 
   const refreshGithubStatus = async () => {
     try {
-      const { connected } = await call("github:get-status", undefined as never);
+      const { connected, oauthAvailable } = await call("github:get-status", undefined as never);
       setGithubConnected(connected);
+      setOauthAvailable(oauthAvailable);
     } catch { /* not critical */ }
   };
 
@@ -63,15 +68,37 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   };
 
   const handleSaveToken = async () => {
-    if (!tokenInput.trim()) return;
-    await save({ githubToken: tokenInput.trim() });
-    setTokenInput("");
-    await refreshGithubStatus();
+    const token = tokenInput.trim();
+    if (!token) return;
+    setSavingToken(true);
+    setTokenError(null);
+    try {
+      // Validates against the GitHub API before storing, so a bad token surfaces
+      // an error here rather than silently failing later on PR fetches.
+      const res = await call("github:set-token", { token });
+      if (res.connected) {
+        setTokenInput("");
+        setConnectedLogin(res.login ?? null);
+        await refreshGithubStatus();
+      } else {
+        setTokenError(res.error ?? "Could not validate token.");
+      }
+    } catch (e) {
+      setTokenError(e instanceof Error ? e.message : "Failed to save token.");
+    } finally {
+      setSavingToken(false);
+    }
   };
 
   const handleDisconnectGitHub = async () => {
     await save({ githubToken: "" });
+    setConnectedLogin(null);
+    setTokenError(null);
     await refreshGithubStatus();
+  };
+
+  const openTokenPage = () => {
+    call("app:open-url", { url: "https://github.com/settings/tokens/new?scopes=repo&description=Multiplex" }).catch(() => {});
   };
 
   if (!settings) return null;
@@ -185,7 +212,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 <div className="text-sm font-medium">GitHub</div>
                 <span className="flex items-center gap-1.5 mt-0.5">
                   <span className={`inline-block h-2 w-2 rounded-full ${githubConnected ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-                  <span className="font-mono text-xs text-muted-foreground">{githubConnected ? "Connected" : "Not connected"}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {githubConnected ? (connectedLogin ? `Connected as ${connectedLogin}` : "Connected") : "Not connected"}
+                  </span>
                 </span>
               </div>
               {githubConnected && (
@@ -197,28 +226,44 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             {!githubConnected && (
               <div className="mt-3 space-y-3 pt-3 border-t border-border/60">
-                <Button variant="outline" size="sm" onClick={handleConnectGitHub} disabled={connecting}>
-                  {connecting ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Connecting…</>
-                  ) : (
-                    <><Github className="h-3.5 w-3.5" /> Connect GitHub</>
-                  )}
-                </Button>
+                {/* OAuth is only offered when a GitHub OAuth App is configured
+                    (GITHUB_OAUTH_CLIENT_ID); otherwise the authorize URL 404s, so
+                    we lead with the personal-access-token path that always works. */}
+                {oauthAvailable && (
+                  <Button variant="outline" size="sm" onClick={handleConnectGitHub} disabled={connecting}>
+                    {connecting ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Connecting…</>
+                    ) : (
+                      <><Github className="h-3.5 w-3.5" /> Connect with GitHub</>
+                    )}
+                  </Button>
+                )}
                 <div className="space-y-1.5">
-                  <Label htmlFor="gh-token">…or paste a personal access token</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="gh-token">{oauthAvailable ? "…or paste a personal access token" : "Paste a personal access token"}</Label>
+                    <button type="button" onClick={openTokenPage} className="text-xs text-accent underline underline-offset-2 hover:opacity-80">
+                      Create a token
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <Input
                       id="gh-token"
                       type="password"
                       placeholder="ghp_…"
                       value={tokenInput}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenInput(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTokenInput(e.target.value); setTokenError(null); }}
                       onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter") handleSaveToken(); }}
                     />
-                    <Button variant="outline" size="sm" onClick={handleSaveToken} disabled={!tokenInput.trim()}>
-                      Save
+                    <Button variant="outline" size="sm" onClick={handleSaveToken} disabled={!tokenInput.trim() || savingToken}>
+                      {savingToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
                     </Button>
                   </div>
+                  {tokenError && (
+                    <p className="flex items-center gap-1.5 text-xs text-destructive">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {tokenError}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">Needs the <span className="font-mono">repo</span> scope to read PRs, checks, and reviews.</p>
                 </div>
               </div>
             )}

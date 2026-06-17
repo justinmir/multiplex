@@ -26,7 +26,9 @@ export interface IpcContract {
 
   // M2.2 — GitHub OAuth + connection status (the token never leaves main)
   "github:connect": { req: void; res: { success: boolean } };
-  "github:get-status": { req: void; res: { connected: boolean } };
+  "github:get-status": { req: void; res: { connected: boolean; oauthAvailable: boolean } };
+  // Validate + store a personal access token; returns the authenticated login.
+  "github:set-token": { req: { token: string }; res: { connected: boolean; login?: string; error?: string } };
 
   // M2.3 — GitHub API client (Octokit)
   "prs:list": { req: { owner: string; repo: string }; res: PullRequest[] };

@@ -74,7 +74,7 @@ export class IpcDataSource implements DataSource {
     return call("projects:sync", { projectId });
   }
 
-  async getGithubStatus(): Promise<{ connected: boolean }> {
+  async getGithubStatus(): Promise<{ connected: boolean; oauthAvailable: boolean }> {
     return call("github:get-status", undefined as never);
   }
 
