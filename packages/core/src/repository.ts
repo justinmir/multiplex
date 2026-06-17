@@ -31,7 +31,8 @@ export interface Repository {
   getActivity(projectId: string): Promise<ActivityItem[]>;
 
   // ---- archive ----
-  archiveSession(id: string): Promise<void>;
+  /** Set a session's archived flag (default true). Persists both directions. */
+  archiveSession(id: string, archived?: boolean): Promise<void>;
 
   // ---- token usage analytics (append-only time series) ----
   recordTokenUsage(e: TokenUsageEvent): Promise<void>;

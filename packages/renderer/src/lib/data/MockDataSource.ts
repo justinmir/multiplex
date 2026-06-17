@@ -37,7 +37,7 @@ export class MockDataSource implements DataSource {
     // no-op in mock
   }
 
-  async archiveSession(_sessionId: string): Promise<void> {
+  async archiveSession(_sessionId: string, _archived = true): Promise<void> {
     // no-op in mock
   }
 

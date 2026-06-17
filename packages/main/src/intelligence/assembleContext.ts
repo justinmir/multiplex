@@ -3,6 +3,7 @@ import type { Project, ProjectSummaryInput } from "@app/core";
 const MAX_NOTE_BODY = 800;
 const MAX_REF_SUMMARY = 200;
 const MAX_REF_CONTENT = 1200; // indexed reference content is richer than a one-liner
+const MAX_INSTRUCTIONS = 600; // user steering for synthesis (bounded)
 const MAX_ITEMS = 20;
 
 function truncate(s: string, max: number): string {
@@ -56,7 +57,20 @@ export function assembleProjectContext(project: Project): AssembledContext {
 /** Build the user-message text for a project summary synthesis. */
 export function buildSummaryPrompt(input: ProjectSummaryInput): string {
   const ctx = assembleProjectContext(input.project);
-  const lines: string[] = [ctx.stateDigest, ""];
+  const lines: string[] = [];
+
+  // User's steering for this project takes precedence — put it up top so the
+  // summary, next steps, and suggested prompts are shaped by it.
+  const instructions = input.project.agentInstructions?.trim();
+  if (instructions) {
+    lines.push(
+      "User instructions for this status update (follow these closely):",
+      truncate(instructions, MAX_INSTRUCTIONS),
+      "",
+    );
+  }
+
+  lines.push(ctx.stateDigest, "");
 
   if (input.sessions.length) {
     lines.push("Sessions:");

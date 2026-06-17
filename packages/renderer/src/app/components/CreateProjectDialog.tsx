@@ -24,6 +24,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
   const isEditing = !!editProject;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [agentInstructions, setAgentInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Initialize the form from the project being edited (or blank) when opened.
@@ -31,6 +32,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
     if (open) {
       setName(editProject?.name ?? "");
       setDescription(editProject && editProject.description !== "No description provided." ? editProject.description : "");
+      setAgentInstructions(editProject?.agentInstructions ?? "");
     }
   }, [open, editProject]);
 
@@ -46,12 +48,14 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
           name: name.trim(),
           slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
           description: description.trim() || "No description provided.",
+          agentInstructions: agentInstructions.trim() || undefined,
         }
       : {
           id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           name: name.trim(),
           slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
           description: description.trim() || "No description provided.",
+          agentInstructions: agentInstructions.trim() || undefined,
           repos: [],
           status: "active",
           color: "#6366f1",
@@ -73,6 +77,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
       await mutations.upsertProject(project);
       setName("");
       setDescription("");
+      setAgentInstructions("");
       onOpenChange(false);
       if (!isEditing) onCreated?.(project.id);
     } catch (err) {
@@ -86,6 +91,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
     if (!isOpen && !submitting) {
       setName("");
       setDescription("");
+      setAgentInstructions("");
     }
     onOpenChange(isOpen);
   };
@@ -127,6 +133,22 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
                 disabled={submitting}
                 rows={3}
               />
+            </div>
+
+            {/* Agent instructions field */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="project-agent-instructions">Agent instructions</Label>
+              <Textarea
+                id="project-agent-instructions"
+                placeholder="How should the agent synthesize this project? e.g. “Focus on what PRs are in flight for my status.”"
+                value={agentInstructions}
+                onChange={(e) => setAgentInstructions(e.target.value)}
+                disabled={submitting}
+                rows={3}
+              />
+              <p className="text-[11.5px] text-muted-foreground">
+                Steers the project summary, next steps, and suggested prompts.
+              </p>
             </div>
 
           </div>

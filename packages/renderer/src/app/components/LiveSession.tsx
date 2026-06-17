@@ -15,11 +15,13 @@ import { call } from "../../lib/ipc/client.js";
  * standalone-session view and the in-project session view so both behave
  * identically.
  */
-export function LiveSession({ session, projectName, backLabel = "Home", onClose }: {
+export function LiveSession({ session, projectName, backLabel = "Home", onClose, onOpenNote }: {
   session: Session;
   projectName?: string;
   backLabel?: string;
   onClose: () => void;
+  /** Navigate to a project note (used by note tool-call cards). */
+  onOpenNote?: (noteId: string) => void;
 }) {
   const mutations = useDataMutations();
 
@@ -96,6 +98,7 @@ export function LiveSession({ session, projectName, backLabel = "Home", onClose 
       onRerunChecks={(repo, number) => mutations.rerunChecks(repo, number)}
       onAddressComments={(comments) => mutations.addressComments(session.id, comments)}
       onOpenPR={() => mutations.openSessionPR(session.id)}
+      onOpenNote={onOpenNote}
       onClose={onClose}
     />
   );

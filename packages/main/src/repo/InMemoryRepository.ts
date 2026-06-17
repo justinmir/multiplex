@@ -189,10 +189,10 @@ export class InMemoryRepository implements Repository {
   }
 
   // ---- archive ----
-  async archiveSession(id: string): Promise<void> {
+  async archiveSession(id: string, archived = true): Promise<void> {
     const s = this.sessions.get(id);
     if (!s) return;
-    this.sessions.set(id, { ...s, archived: true });
+    this.sessions.set(id, { ...s, archived });
   }
 
   async recordTokenUsage(e: TokenUsageEvent): Promise<void> {

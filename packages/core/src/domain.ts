@@ -173,6 +173,12 @@ export interface Project {
   /** Projects can span multiple repos. */
   repos: string[];
   status: ProjectStatus;
+  /**
+   * Free-form steering the agent/intelligence layer should honor for this
+   * project — e.g. "Focus on what PRs are in flight for my status". Used when
+   * synthesizing the summary + next steps and suggesting session prompts.
+   */
+  agentInstructions?: string;
   color: string;
   progress: number;
   openPRs: number;

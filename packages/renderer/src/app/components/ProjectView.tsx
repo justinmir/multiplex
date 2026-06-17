@@ -5,15 +5,17 @@ import { OverviewTab } from "./tabs/OverviewTab";
 import { SessionsTab } from "./tabs/SessionsTab";
 import { NotesTab } from "./tabs/NotesTab";
 import { ReferencesTab } from "./tabs/ReferencesTab";
+import { InstructionsTab } from "./tabs/InstructionsTab";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
 
-type TabId = "overview" | "sessions" | "notes" | "references";
+type TabId = "overview" | "sessions" | "notes" | "references" | "instructions";
 
 const tabs: { id: TabId; label: string; count?: (p: Project) => number }[] = [
   { id: "overview", label: "Overview" },
-  { id: "sessions", label: "Sessions", count: (p) => p.sessions.length },
+  { id: "sessions", label: "Sessions", count: (p) => p.sessions.filter((s) => !s.archived).length },
   { id: "notes", label: "Notes", count: (p) => p.notes.length },
   { id: "references", label: "References", count: (p) => p.references.length },
+  { id: "instructions", label: "Instructions" },
 ];
 
 interface ProjectViewProps {
@@ -37,6 +39,28 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
     setSessionOpen(initialSessionId ?? null);
     setNoteFocus(null);
   }, [project.id, initialSessionId]);
+
+  // Esc navigates to the owning page: an open session/note collapses back to
+  // its list, and a non-overview tab collapses to the overview. We listen at
+  // the window so it works even when nothing inside is focused, but bail when a
+  // dialog/menu is open or an inner editor already consumed the key (it calls
+  // preventDefault), so e.g. canceling an inline prompt edit doesn't also close
+  // the session.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="menu"][data-state="open"]')) return;
+      // Scope the collapse to the visible tab so stale open-state from a hidden
+      // tab (e.g. a session left open while viewing Notes) is never consumed.
+      if (tab === "sessions" && sessionOpen !== null) setSessionOpen(null);
+      else if (tab === "notes" && noteFocus !== null) setNoteFocus(null);
+      else if (tab !== "overview") setTab("overview");
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sessionOpen, noteFocus, tab]);
 
   const handleResynthesize = () => {
     setResynthesizing(true);
@@ -128,9 +152,9 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
         )}
         {tab === "sessions" && (
           sessionOpen !== null ? (
-            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} />
+            <SessionsTab project={project} openId={sessionOpen} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} onArchiveSession={(id, archived) => mutations.archiveSession(id, archived)} />
           ) : (
-            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} /></div>
+            <div className="px-8 py-6"><SessionsTab project={project} openId={null} onOpen={setSessionOpen} onStartSession={onCreateProjectSession} onOpenNote={openNote} onArchiveSession={(id, archived) => mutations.archiveSession(id, archived)} /></div>
           )
         )}
         {tab === "notes" && <div className="px-8 py-6"><NotesTab project={project} focusedId={noteFocus} onFocus={setNoteFocus} /></div>}
@@ -143,6 +167,7 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
             />
           </div>
         )}
+        {tab === "instructions" && <div className="px-8 py-6"><InstructionsTab project={project} /></div>}
       </div>
     </div>
   );

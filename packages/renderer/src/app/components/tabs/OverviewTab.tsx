@@ -86,13 +86,14 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
             <Plus className="h-3 w-3" /> New session
           </button>
         </div>
-        {project.sessions.length === 0 ? (
+        {project.sessions.filter((s) => !s.archived).length === 0 ? (
           <div className="px-5 py-8 text-center text-[12.5px] text-muted-foreground">
             No sessions yet — start one to put an agent to work.
           </div>
         ) : (
           <ul>
-            {[...project.sessions]
+            {project.sessions
+              .filter((s) => !s.archived)
               .sort((a, b) => sessionWeight(b.status) - sessionWeight(a.status))
               .map((s, i, arr) => (
                 <li key={s.id}>

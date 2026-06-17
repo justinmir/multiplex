@@ -40,8 +40,8 @@ export class IpcDataSource implements DataSource {
     return call("refs:delete", { scope, refId });
   }
 
-  async archiveSession(sessionId: string): Promise<void> {
-    return call("sessions:archive", { sessionId });
+  async archiveSession(sessionId: string, archived = true): Promise<void> {
+    return call("sessions:archive", { sessionId, archived });
   }
 
   // ---- writes (M3.3 — session-scoped references) ----

@@ -282,8 +282,8 @@ export class JsonRepository extends InMemoryRepository {
     this.saveToDisk();
   }
 
-  async archiveSession(id: string): Promise<void> {
-    await super.archiveSession(id);
+  async archiveSession(id: string, archived = true): Promise<void> {
+    await super.archiveSession(id, archived);
     this.saveToDisk();
   }
 

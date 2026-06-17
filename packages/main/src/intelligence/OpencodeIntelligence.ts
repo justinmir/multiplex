@@ -16,6 +16,8 @@ const SUMMARY_SYSTEM =
   "(imperative, 1-2 sentences) a user could hand a coding agent to do exactly that step. " +
   "suggestedPrompts is EXACTLY 4 specific, actionable prompts (imperative, one sentence each) a " +
   "user could hand to a coding agent to push this project forward, grounded in the context. " +
+  "If the context includes user instructions for the status update, follow them closely — let " +
+  "them shape the summary's focus, the next steps, and the suggested prompts. " +
   "Do not invent facts not in the context.";
 
 const GLOBAL_PROMPTS_SYSTEM =

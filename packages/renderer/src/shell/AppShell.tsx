@@ -155,8 +155,8 @@ export function AppShell() {
   const archiveSession = (id: string, archived: boolean) => {
     // Optimistic update on local state
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, archived } : s)));
-    // Persist to disk only when archiving (un-archiving is local-only for now)
-    if (archived) mutations.archiveSession(id);
+    // Persist both directions (archive + unarchive).
+    mutations.archiveSession(id, archived);
   };
 
   const createSession = async (prompt: string) => {
@@ -169,13 +169,20 @@ export function AppShell() {
   };
 
   // M5.1 — project-scoped session creation (M-A5 runtime)
-  const handleCreateProjectSession = async (prompt: string, projectId: string) => {
-    try {
-      const { sessionId } = await mutations.startSession({ prompt, projectId });
-      openProject(projectId, sessionId);
-    } catch (err) {
+  // Navigate to the session immediately (optimistic) so clicking a suggested
+  // next step opens the created session right away instead of waiting for the
+  // full startSession round-trip (workspace prep + harness spawn). We mint the
+  // id client-side and hand it to the runtime, which persists the session early
+  // and emits data:changed so the live view populates within a frame.
+  const handleCreateProjectSession = (prompt: string, projectId: string) => {
+    const sessionId = `ss_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    openProject(projectId, sessionId);
+    mutations.startSession({ sessionId, prompt, projectId }).catch((err) => {
       console.error("Failed to create project session:", err);
-    }
+      // Roll back the optimistic navigation if the session never got created
+      // (e.g. concurrency limit hit before it was persisted).
+      setProjectInitialSession((cur) => (cur === sessionId ? null : cur));
+    });
   };
 
   // The active standalone session (its full live view is owned by LiveSession).
