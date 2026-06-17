@@ -265,21 +265,12 @@ export function ProjectsSidebar({
       </div>
 
       <div className="border-t border-border px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary font-mono text-[10px] text-foreground">
-            AS
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] text-foreground">Alex Stern</div>
-            <div className="truncate font-mono text-[10px] text-muted-foreground">alex@acme.dev</div>
-          </div>
-          <button
-            onClick={onOpenSettings}
-            className="rounded-sm p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={onOpenSettings}
+          className="flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-[12px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        >
+          <Settings className="h-3.5 w-3.5" /> Settings
+        </button>
         {/* GitHub connection status */}
         {githubConnected !== undefined && !githubConnected && (
           <button
