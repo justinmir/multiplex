@@ -3,7 +3,7 @@ import {
   ArrowLeft, Send, GitBranch, Cpu, Square, Sparkles, Wrench, User, Bot,
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
-  Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder,
+  Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder, ArrowUp, Trash2,
 } from "lucide-react";
 import { Session, SessionMsg, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
@@ -22,6 +22,10 @@ interface Props {
   session: Session | null;
   /** Ordered steps of the in-flight turn (thinking, tool calls, streaming reply). */
   liveSteps?: SessionMsg[];
+  /** Messages queued while the agent is busy. */
+  queuedMessages?: string[];
+  onInterruptQueued?: (index: number) => void;
+  onDeleteQueued?: (index: number) => void;
   prs?: PullRequest[];
   references?: Reference[];
   onAddReference?: (r: Reference) => void;
@@ -49,7 +53,8 @@ interface Props {
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 
 export function SessionDetail({
-  projectName, backLabel = "Back", session, liveSteps = [], prs = [], references = [],
+  projectName, backLabel = "Back", session, liveSteps = [], queuedMessages = [], onInterruptQueued, onDeleteQueued,
+  prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
   onReplyToComment, onRerunChecks, onAddressComments, onOpenPR,
@@ -122,6 +127,9 @@ export function SessionDetail({
           />
         )}
       </div>
+      {session && queuedMessages.length > 0 && (
+        <QueuedMessages messages={queuedMessages} onInterrupt={onInterruptQueued} onDelete={onDeleteQueued} />
+      )}
       <Composer
         session={session}
         draft={draft}
@@ -980,6 +988,48 @@ function NewSessionPane({ projectName, starterPrompts, draft, setDraft }: { proj
             {s}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Messages queued while the agent is busy — shown just above the composer.
+ *  Each can be run immediately (interrupting the current turn) or removed. */
+function QueuedMessages({ messages, onInterrupt, onDelete }: { messages: string[]; onInterrupt?: (i: number) => void; onDelete?: (i: number) => void }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 pt-2">
+      <div className="rounded-md border border-border bg-card/40">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground"
+        >
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {messages.length} Queued
+        </button>
+        {open && (
+          <ul className="border-t border-border/60">
+            {messages.map((msg, i) => (
+              <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-foreground">
+                <span className="min-w-0 flex-1 truncate">{msg}</span>
+                <button
+                  onClick={() => onInterrupt?.(i)}
+                  title="Run now (interrupts the current turn)"
+                  className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => onDelete?.(i)}
+                  title="Remove from queue"
+                  className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

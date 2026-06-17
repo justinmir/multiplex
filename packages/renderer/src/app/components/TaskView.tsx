@@ -5,6 +5,10 @@ interface Props {
   session: Session;
   /** Ordered steps of the in-flight turn (thinking, tool calls, streaming reply). */
   liveSteps?: SessionMsg[];
+  /** Messages queued while the agent is busy (shown above the composer). */
+  queuedMessages?: string[];
+  onInterruptQueued?: (index: number) => void;
+  onDeleteQueued?: (index: number) => void;
   prs: PullRequest[];
   onAddReference: (r: Reference) => void;
   /** Called when user sends a message in this session. Receives the raw message text. */
@@ -25,12 +29,15 @@ interface Props {
   onOpenPR?: () => void;
 }
 
-export function TaskView({ session, liveSteps, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
+export function TaskView({ session, liveSteps, queuedMessages, onInterruptQueued, onDeleteQueued, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
       session={session}
       liveSteps={liveSteps}
+      queuedMessages={queuedMessages}
+      onInterruptQueued={onInterruptQueued}
+      onDeleteQueued={onDeleteQueued}
       prs={prs}
       references={session.references ?? []}
       onAddReference={onAddReference}
