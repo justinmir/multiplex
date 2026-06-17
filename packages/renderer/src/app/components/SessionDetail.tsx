@@ -1103,6 +1103,7 @@ function Composer({ session, draft, setDraft, currentModel, availableModels, onS
       <div className="mx-auto max-w-3xl">
         <div className="rounded-lg border border-border bg-input-background focus-within:border-border-strong">
           <textarea
+            autoFocus
             value={draft} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend?.(); } }}
             placeholder={session ? "Reply to the agent…" : "Describe the task. The agent will plan, code, and open PRs across the repos it needs."}
