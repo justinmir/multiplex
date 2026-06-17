@@ -571,7 +571,9 @@ function Message({ role, content, ts, canEdit, onEdit }: { role: SessionMsg["rol
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(); }
-                if (e.key === "Escape") setEditing(false);
+                // Consume Escape (preventDefault) so canceling the edit doesn't
+                // also bubble up to the project's "navigate back" handler.
+                if (e.key === "Escape") { e.preventDefault(); setEditing(false); }
               }}
               rows={Math.min(8, draft.split("\n").length + 1)}
               className="w-full resize-none rounded-md border border-border bg-card/40 p-2 text-[13.5px] leading-relaxed text-foreground focus:outline-none"

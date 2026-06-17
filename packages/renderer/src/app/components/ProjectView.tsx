@@ -38,6 +38,28 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
     setNoteFocus(null);
   }, [project.id, initialSessionId]);
 
+  // Esc navigates to the owning page: an open session/note collapses back to
+  // its list, and a non-overview tab collapses to the overview. We listen at
+  // the window so it works even when nothing inside is focused, but bail when a
+  // dialog/menu is open or an inner editor already consumed the key (it calls
+  // preventDefault), so e.g. canceling an inline prompt edit doesn't also close
+  // the session.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="menu"][data-state="open"]')) return;
+      // Scope the collapse to the visible tab so stale open-state from a hidden
+      // tab (e.g. a session left open while viewing Notes) is never consumed.
+      if (tab === "sessions" && sessionOpen !== null) setSessionOpen(null);
+      else if (tab === "notes" && noteFocus !== null) setNoteFocus(null);
+      else if (tab !== "overview") setTab("overview");
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sessionOpen, noteFocus, tab]);
+
   const handleResynthesize = () => {
     setResynthesizing(true);
     mutations.resynthesizeProject(project.id).finally(() => setResynthesizing(false));
