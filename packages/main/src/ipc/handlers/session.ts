@@ -3,6 +3,45 @@ import type { SessionRuntime } from "../../session/SessionRuntime.js";
 import type { HarnessConfig } from "@app/core";
 import { createHarness } from "@app/core";
 
+/**
+ * Harness health/models come from spawning the harness binary (e.g. `opencode
+ * --version` / `opencode models`), which is slow. They're global per harness
+ * and change rarely, but the renderer re-queries them on every session view, so
+ * cache per harnessId with a TTL and de-dupe concurrent calls. This keeps
+ * session switching instant instead of re-spawning the binary each time.
+ */
+const HARNESS_INFO_TTL_MS = 5 * 60_000;
+
+interface CacheSlot<T> { value?: T; ts: number; inflight?: Promise<T>; }
+
+function memoize<T>(
+  store: Map<string, CacheSlot<T>>,
+  key: string,
+  accept: (value: T) => boolean,
+  produce: () => Promise<T>,
+): Promise<T> {
+  const now = Date.now();
+  const slot = store.get(key);
+  if (slot?.value !== undefined && now - slot.ts < HARNESS_INFO_TTL_MS) return Promise.resolve(slot.value);
+  if (slot?.inflight) return slot.inflight;
+  const inflight = produce()
+    .then((value) => {
+      // Only cache "good" results so a transient failure (binary missing,
+      // not yet authenticated) is retried on the next call rather than stuck.
+      if (accept(value)) store.set(key, { value, ts: Date.now() });
+      else store.delete(key);
+      return value;
+    })
+    .catch((err) => { store.delete(key); throw err; });
+  store.set(key, { ts: now, inflight });
+  return inflight;
+}
+
+type HealthResult = { ok: boolean; version?: string; detail?: string };
+type ModelsResult = Array<{ id: string; label?: string; provider?: string }>;
+const healthCache = new Map<string, CacheSlot<HealthResult>>();
+const modelsCache = new Map<string, CacheSlot<ModelsResult>>();
+
 /** Register session runtime IPC handlers (M-A4). */
 export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
   handle("session:start", async (req) => {
@@ -34,19 +73,21 @@ export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
     return runtime.removeQueued(req.sessionId, req.index);
   });
 
-  // M-A8 — harness health check
+  // M-A8 — harness health check (cached per harnessId; see memoize above)
   handle("harness:health", async (req) => {
-    const harness = createHarness({ id: req.harnessId } as HarnessConfig);
-    if (!harness) {
-      return { ok: false, detail: `No harness registered for "${req.harnessId}"` };
-    }
-    return harness.health();
+    return memoize(healthCache, req.harnessId, (v) => v.ok, async () => {
+      const harness = createHarness({ id: req.harnessId } as HarnessConfig);
+      if (!harness) return { ok: false, detail: `No harness registered for "${req.harnessId}"` };
+      return harness.health();
+    });
   });
 
-  // M-A8 — list models for a given harness
+  // M-A8 — list models for a given harness (cached per harnessId)
   handle("harness:models", async (req) => {
-    const harness = createHarness({ id: req.harnessId } as HarnessConfig);
-    if (!harness) return [];
-    return harness.listModels();
+    return memoize(modelsCache, req.harnessId, (v) => v.length > 0, async () => {
+      const harness = createHarness({ id: req.harnessId } as HarnessConfig);
+      if (!harness) return [];
+      return harness.listModels();
+    });
   });
 }
