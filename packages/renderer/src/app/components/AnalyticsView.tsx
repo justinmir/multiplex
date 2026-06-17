@@ -84,7 +84,7 @@ export function AnalyticsView({ onClose }: { onClose: () => void }) {
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#9aa0a6" }} interval="preserveStartEnd" stroke="#3a3a3e" />
                 <YAxis tick={{ fontSize: 10, fill: "#9aa0a6" }} tickFormatter={compact} stroke="#3a3a3e" width={44} />
                 <Tooltip
-                  formatter={(v: number, n) => [`${v.toLocaleString()} tokens`, n === "sessions" ? "Sessions" : "App"]}
+                  formatter={(v: number, n) => [`${v.toLocaleString()} tokens`, n]}
                   contentStyle={{ background: "#16171b", border: "1px solid #2a2a2e", borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: "#cfcfcf" }}
                 />
