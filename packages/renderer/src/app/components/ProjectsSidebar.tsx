@@ -64,9 +64,9 @@ export function ProjectsSidebar({
     <aside className="flex h-full w-full min-w-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 ring-1 ring-accent/40">
-          <span className="font-mono text-[10px] text-accent">HX</span>
+          <span className="font-mono text-[10px] text-accent">MX</span>
         </div>
-        <span className="font-display text-[17px] tracking-tight text-foreground">harness</span>
+        <span className="font-display text-[17px] tracking-tight text-foreground">Multiplex</span>
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">v0.4.2</span>
       </div>
 
