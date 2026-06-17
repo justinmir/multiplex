@@ -1,4 +1,4 @@
-import type { Repository, Session, SessionMsg, Workspace, AppSettingsData, HarnessConfig, HostTool, ForgeService, PullRequest, GitService, ActivityItem } from "@app/core";
+import type { Repository, Session, SessionMsg, Workspace, AppSettingsData, HarnessConfig, HostTool, ForgeService, PullRequest, GitService, ActivityItem, Note, Reference } from "@app/core";
 import type { Harness, HarnessEvent, HarnessRun } from "@app/core";
 import { createHarness } from "@app/core";
 import { registerBuiltInHarnesses } from "../harness/index.js";
@@ -292,7 +292,97 @@ export class SessionRuntime {
       }
     }
 
-    return { cwd, availableRepos, tools: [openRepo], notes: ctx?.notes, references: ctx?.references };
+    // Project sessions can manage their project's notes + references.
+    const projectTools = projectId ? this.buildProjectTools(projectId) : [];
+
+    return { cwd, availableRepos, tools: [openRepo, ...projectTools], notes: ctx?.notes, references: ctx?.references };
+  }
+
+  /**
+   * Host tools that let the agent read/write its project's notes and references
+   * (e.g. "store the context from this thread in a new note"). Project-scoped;
+   * each mutation persists and notifies the renderer.
+   */
+  private buildProjectTools(projectId: string): HostTool[] {
+    const changed = () => this.emitFn("data:changed", { kind: "project" });
+    const rid = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    return [
+      {
+        name: "create_note",
+        description: "Create a note in the current project (long-lived context the agent reads on every run). Argument: { title: string, body: string (markdown), tags?: string[] }.",
+        inputSchema: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["title", "body"] },
+        handler: async (raw) => {
+          const a = (raw ?? {}) as { title?: string; body?: string; tags?: string[] };
+          if (!a.title?.trim()) return { content: "create_note requires a 'title'", isError: true };
+          const note: Note = { id: rid("note"), title: a.title.trim(), body: a.body ?? "", author: "agent", updatedAt: new Date().toISOString(), tags: Array.isArray(a.tags) ? a.tags : [] };
+          await this.repo.upsertNote(projectId, note);
+          changed();
+          return { content: `Created note "${note.title}" (id ${note.id}).` };
+        },
+      },
+      {
+        name: "update_note",
+        description: "Update an existing project note. Argument: { note_id: string, title?: string, body?: string, tags?: string[] }.",
+        inputSchema: { type: "object", properties: { note_id: { type: "string" }, title: { type: "string" }, body: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["note_id"] },
+        handler: async (raw) => {
+          const a = (raw ?? {}) as { note_id?: string; title?: string; body?: string; tags?: string[] };
+          const existing = (await this.repo.getNotes(projectId)).find((n) => n.id === a.note_id);
+          if (!existing) return { content: `No note with id ${a.note_id}`, isError: true };
+          const updated: Note = { ...existing, title: a.title ?? existing.title, body: a.body ?? existing.body, tags: Array.isArray(a.tags) ? a.tags : existing.tags, updatedAt: new Date().toISOString() };
+          await this.repo.upsertNote(projectId, updated);
+          changed();
+          return { content: `Updated note "${updated.title}".` };
+        },
+      },
+      {
+        name: "delete_note",
+        description: "Delete a project note. Argument: { note_id: string }.",
+        inputSchema: { type: "object", properties: { note_id: { type: "string" } }, required: ["note_id"] },
+        handler: async (raw) => {
+          const id = (raw as { note_id?: string } | undefined)?.note_id;
+          if (!id) return { content: "delete_note requires 'note_id'", isError: true };
+          await this.repo.deleteNote(projectId, id);
+          changed();
+          return { content: `Deleted note ${id}.` };
+        },
+      },
+      {
+        name: "list_notes",
+        description: "List the current project's notes. Returns id, title, and tags for each. No arguments.",
+        inputSchema: { type: "object", properties: {} },
+        handler: async () => {
+          const notes = await this.repo.getNotes(projectId);
+          if (notes.length === 0) return { content: "No notes yet." };
+          return { content: notes.map((n) => `- ${n.id}: ${n.title}${n.tags.length ? ` [${n.tags.join(", ")}]` : ""}`).join("\n") };
+        },
+      },
+      {
+        name: "add_reference",
+        description: "Add a reference (link/doc/issue/etc.) to the current project. Argument: { title: string, url?: string, kind?: \"link\"|\"doc\"|\"issue\"|\"todo\"|\"meeting\"|\"pr\", summary?: string }.",
+        inputSchema: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, kind: { type: "string" }, summary: { type: "string" } }, required: ["title"] },
+        handler: async (raw) => {
+          const a = (raw ?? {}) as { title?: string; url?: string; kind?: string; summary?: string };
+          if (!a.title?.trim()) return { content: "add_reference requires a 'title'", isError: true };
+          const kinds = ["pr", "doc", "link", "meeting", "todo", "issue"];
+          const ref: Reference = { id: rid("ref"), kind: (kinds.includes(a.kind ?? "") ? a.kind : "link") as Reference["kind"], title: a.title.trim(), url: a.url, summary: a.summary, addedAt: new Date().toISOString(), addedBy: "agent" };
+          await this.repo.upsertReference({ projectId }, ref);
+          changed();
+          return { content: `Added reference "${ref.title}" (id ${ref.id}).` };
+        },
+      },
+      {
+        name: "remove_reference",
+        description: "Remove a reference from the current project. Argument: { reference_id: string }.",
+        inputSchema: { type: "object", properties: { reference_id: { type: "string" } }, required: ["reference_id"] },
+        handler: async (raw) => {
+          const id = (raw as { reference_id?: string } | undefined)?.reference_id;
+          if (!id) return { content: "remove_reference requires 'reference_id'", isError: true };
+          await this.repo.deleteReference({ projectId }, id);
+          changed();
+          return { content: `Removed reference ${id}.` };
+        },
+      },
+    ];
   }
 
   /** Materialize a worktree for `repoId` and record it on the session. */
