@@ -80,8 +80,11 @@ export interface IpcContract {
   // M-C4 — Real diffs across a session's materialized worktrees
   "session:changes": { req: { sessionId: string }; res: Array<{ repo: string; files: FileChange[] }> };
 
-  // M-B3 — Live PR detail (files / comments / checks) for a session's PRs
+  // M-B3 — Live PR detail (files / comments / checks) for a session's PRs.
+  // Served from the background poller's cache (no live request on read).
   "pr:get": { req: { repo: string; number: number }; res: PullRequest | null };
+  // Manual "sync now": force-refresh a session's open PRs and return them.
+  "session:refresh-prs": { req: { sessionId: string }; res: PullRequest[] };
 
   // M-B4 — PR actions
   "pr:reply": { req: { repo: string; number: number; commentId: string; body: string }; res: void };

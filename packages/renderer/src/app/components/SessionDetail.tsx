@@ -4,7 +4,7 @@ import {
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder, ArrowUp, Trash2,
-  Copy, Check, Pencil, FileText,
+  Copy, Check, Pencil, FileText, RefreshCw,
 } from "lucide-react";
 import { Session, SessionMsg, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
@@ -51,6 +51,8 @@ interface Props {
   onRerunChecks?: (repo: string, number: number) => void;
   onAddressComments?: (comments: string[]) => void;
   onOpenPR?: () => void;
+  /** Force an immediate refresh of this session's PR status (manual sync). */
+  onRefreshPRs?: () => Promise<void> | void;
   /** Navigate to a project note (used by note tool-call cards). */
   onOpenNote?: (noteId: string) => void;
 }
@@ -62,7 +64,7 @@ export function SessionDetail({
   prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
-  onReplyToComment, onRerunChecks, onAddressComments, onOpenPR, onOpenNote,
+  onReplyToComment, onRerunChecks, onAddressComments, onOpenPR, onRefreshPRs, onOpenNote,
 }: Props) {
   const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
@@ -261,6 +263,7 @@ export function SessionDetail({
                     mutations.openUrl(url);
                   }}
                   onOpenPR={onOpenPR}
+                  onRefreshPRs={onRefreshPRs}
                 />
               )}
               {railTab === "changes" && <ChangesRail files={allFiles} totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)} totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)} multiPR={multiRepo} />}
@@ -313,8 +316,16 @@ export function SessionDetail({
 
 /* ---------- Right-rail panes ---------- */
 
-function OverviewRail({ session, prs, onMergePR, onOpenGitHub, onOpenPR }: { session: Session; prs: PullRequest[]; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void; onOpenPR?: () => void }) {
+function OverviewRail({ session, prs, onMergePR, onOpenGitHub, onOpenPR, onRefreshPRs }: { session: Session; prs: PullRequest[]; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void; onOpenPR?: () => void; onRefreshPRs?: () => Promise<void> | void }) {
   const hasWorkspaces = session.workspaces.length > 0;
+  // PR status is kept fresh by a background poller; this lets the user force an
+  // immediate refresh instead of waiting for the next interval.
+  const [syncing, setSyncing] = useState(false);
+  const syncNow = async () => {
+    if (!onRefreshPRs || syncing) return;
+    setSyncing(true);
+    try { await onRefreshPRs(); } finally { setSyncing(false); }
+  };
   return (
     <div className="space-y-4 px-4 py-4">
       {/* Workspaces */}
@@ -336,7 +347,21 @@ function OverviewRail({ session, prs, onMergePR, onOpenGitHub, onOpenPR }: { ses
       </RailBlock>
 
       {/* Linked PRs */}
-      <RailBlock title="Pull requests" count={prs.length}>
+      <RailBlock
+        title="Pull requests"
+        count={prs.length}
+        action={onRefreshPRs && prs.length > 0 ? (
+          <button
+            onClick={syncNow}
+            disabled={syncing}
+            title="Sync PR status now"
+            className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync"}
+          </button>
+        ) : undefined}
+      >
         {prs.length === 0 ? (
           <EmptyLine text="No PRs opened yet." />
         ) : (
@@ -1063,12 +1088,13 @@ function ReferencesRail({ references, onAdd, openAddTick }: { references: Refere
 
 /* ---------- Shared bits ---------- */
 
-function RailBlock({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function RailBlock({ title, count, action, children }: { title: string; count?: number; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section>
       <div className="mb-1.5 flex items-center gap-1.5 px-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
         <span>{title}</span>
         {count !== undefined && <span className="text-muted-foreground/60">{count}</span>}
+        {action && <span className="ml-auto">{action}</span>}
       </div>
       {children}
     </section>

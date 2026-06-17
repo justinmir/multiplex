@@ -65,6 +65,8 @@ interface DataMutationValue {
   replyToComment(repo: string, number: number, commentId: string, body: string): Promise<void>;
   /** Re-run a PR's checks on GitHub. */
   rerunChecks(repo: string, number: number): Promise<void>;
+  /** Force an immediate refresh of a session's open PRs (manual "sync now"). */
+  refreshSessionPRs(sessionId: string): Promise<void>;
   /** Ask the agent to address review comments (re-enters the harness). */
   addressComments(sessionId: string, comments: string[]): Promise<void>;
   /** Open a draft PR per touched repo with changes; returns the count opened. */
@@ -426,6 +428,17 @@ export function DataProvider({
         toast.success("Checks re-queued", { id });
       } catch (err) {
         toast.error(`Re-run failed: ${err instanceof Error ? err.message : String(err)}`, { id });
+        throw err;
+      }
+    },
+
+    /** Force an immediate refresh of a session's open PRs. The updated detail
+     *  arrives via `pr:<repo>#<n>:changed` events the open session listens for. */
+    async refreshSessionPRs(sessionId: string): Promise<void> {
+      try {
+        await call("session:refresh-prs", { sessionId });
+      } catch (err) {
+        toast.error(`PR sync failed: ${err instanceof Error ? err.message : String(err)}`);
         throw err;
       }
     },

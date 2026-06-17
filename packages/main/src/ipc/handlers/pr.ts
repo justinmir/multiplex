@@ -2,12 +2,22 @@ import { handle } from "../router.js";
 import { emit } from "../emit.js";
 import type { ForgeService } from "@app/core";
 import type { SessionRuntime } from "../../session/SessionRuntime.js";
+import type { PrPoller } from "../../forge/PrPoller.js";
 
 /** Register live PR-detail + PR-action IPC handlers (M-B3/M-B4). */
-export function registerPrHandlers(forge: ForgeService, runtime: SessionRuntime) {
-  // M-B3 — full PR detail (files / comments / checks) for the rails
+export function registerPrHandlers(forge: ForgeService, runtime: SessionRuntime, prPoller: PrPoller) {
+  // M-B3 — full PR detail (files / comments / checks) for the rails. Served
+  // from the poller's cache so opening/switching sessions never blocks on a
+  // live GitHub request; the poller refreshes detail in the background.
   handle("pr:get", async (req) => {
-    return forge.getPR(req.repo, req.number);
+    return prPoller.get(req.repo, req.number);
+  });
+
+  // Manual "sync now" — force-refresh a session's open PRs immediately and
+  // return the freshest detail. Background refreshes are emitted as
+  // `pr:<repo>#<n>:changed` events, which the open session re-reads from cache.
+  handle("session:refresh-prs", async (req) => {
+    return prPoller.refreshSession(req.sessionId);
   });
 
   // M-B4 — reply to a review/PR comment on GitHub
