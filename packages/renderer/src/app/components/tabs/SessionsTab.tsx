@@ -11,9 +11,11 @@ interface Props {
   onOpen: (id: string | "new" | null) => void;
   /** Called when the user starts a new session from within this tab. */
   onStartSession?: (prompt: string) => void;
+  /** Navigate to a project note (e.g. from a note tool-call card). */
+  onOpenNote?: (noteId: string) => void;
 }
 
-export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) {
+export function SessionsTab({ project, openId, onOpen, onStartSession, onOpenNote }: Props) {
   const close = () => onOpen(null);
 
   if (openId === "new") {
@@ -38,6 +40,7 @@ export function SessionsTab({ project, openId, onOpen, onStartSession }: Props) 
         backLabel="All sessions"
         session={session}
         onClose={close}
+        onOpenNote={onOpenNote}
       />
     );
   }

@@ -363,6 +363,19 @@ export class SessionRuntime {
         },
       },
       {
+        name: "get_note",
+        description: "Retrieve a single project note's full content by id. Argument: { note_id: string }.",
+        inputSchema: { type: "object", properties: { note_id: { type: "string" } }, required: ["note_id"] },
+        handler: async (raw) => {
+          const id = (raw as { note_id?: string } | undefined)?.note_id;
+          if (!id) return { content: "get_note requires 'note_id'", isError: true };
+          const note = (await this.repo.getNotes(projectId)).find((n) => n.id === id);
+          if (!note) return { content: `No note with id ${id}`, isError: true };
+          const tags = note.tags.length ? `\nTags: ${note.tags.join(", ")}` : "";
+          return { content: `# ${note.title}${tags}\n\n${note.body}` };
+        },
+      },
+      {
         name: "add_reference",
         description: "Add a reference (link/doc/issue/etc.) to the current project. Argument: { title: string, url?: string, kind?: \"link\"|\"doc\"|\"issue\"|\"todo\"|\"meeting\"|\"pr\", summary?: string }.",
         inputSchema: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, kind: { type: "string" }, summary: { type: "string" } }, required: ["title"] },

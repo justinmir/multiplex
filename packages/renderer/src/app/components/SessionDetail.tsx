@@ -4,7 +4,7 @@ import {
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder, ArrowUp, Trash2,
-  Copy, Check, Pencil,
+  Copy, Check, Pencil, FileText,
 } from "lucide-react";
 import { Session, SessionMsg, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
@@ -51,6 +51,8 @@ interface Props {
   onRerunChecks?: (repo: string, number: number) => void;
   onAddressComments?: (comments: string[]) => void;
   onOpenPR?: () => void;
+  /** Navigate to a project note (used by note tool-call cards). */
+  onOpenNote?: (noteId: string) => void;
 }
 
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
@@ -60,7 +62,7 @@ export function SessionDetail({
   prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
-  onReplyToComment, onRerunChecks, onAddressComments, onOpenPR,
+  onReplyToComment, onRerunChecks, onAddressComments, onOpenPR, onOpenNote,
 }: Props) {
   const mutations = useDataMutations();
   const hasPRs = prs.length > 0;
@@ -128,6 +130,7 @@ export function SessionDetail({
             totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)}
             totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)}
             onEditPrompt={onEditPrompt}
+            onOpenNote={onOpenNote}
           />
         )}
       </div>
@@ -461,13 +464,14 @@ function CheckSummary({ pr }: { pr: PullRequest }) {
 
 /* ---------- Conversation ---------- */
 
-function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDels, onEditPrompt }: {
+function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDels, onEditPrompt, onOpenNote }: {
   session: Session;
   liveSteps: SessionMsg[];
   changeFiles: FileWithMeta[];
   totalAdds: number;
   totalDels: number;
   onEditPrompt?: (newText: string) => void;
+  onOpenNote?: (noteId: string) => void;
 }) {
   // Persisted transcript + the in-flight turn's live steps, in order.
   const all = [...session.messages, ...liveSteps];
@@ -500,7 +504,7 @@ function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDel
           ? <Message key={i} role={g.msg.role} content={g.msg.content} ts={g.msg.ts}
               canEdit={running && g.msg === lastUserMsg && !!onEditPrompt}
               onEdit={onEditPrompt} />
-          : <StepGroup key={i} steps={g.items} />
+          : <StepGroup key={i} steps={g.items} onOpenNote={onOpenNote} />
       )}
       {running && (
         <div className="flex items-center gap-2 pl-9 font-mono text-[11px] text-muted-foreground">
@@ -595,13 +599,85 @@ function Message({ role, content, ts, canEdit, onEdit }: { role: SessionMsg["rol
 /* ---------- Agent steps (thinking + tool calls) ---------- */
 
 /** A vertical rail of darkened, smaller "thinking" + tool-call steps. */
-function StepGroup({ steps }: { steps: SessionMsg[] }) {
+function StepGroup({ steps, onOpenNote }: { steps: SessionMsg[]; onOpenNote?: (noteId: string) => void }) {
   return (
     <div className="ml-3 space-y-1 border-l border-border/60 pl-3.5">
-      {steps.map((s, i) =>
-        s.role === "thinking"
-          ? <ThinkingStep key={i} content={s.content} />
-          : <ToolStep key={i} step={s} />,
+      {steps.map((s, i) => {
+        if (s.role === "thinking") return <ThinkingStep key={i} content={s.content} />;
+        const note = noteToolInfo(s);
+        if (note) return <NoteToolCard key={i} info={note} onOpenNote={onOpenNote} />;
+        return <ToolStep key={i} step={s} />;
+      })}
+    </div>
+  );
+}
+
+/** Note CRUD tool calls the agent makes on a project's notes. */
+interface NoteToolInfo {
+  noteId?: string;
+  title?: string;
+  body?: string;
+  verb: "Created" | "Updated" | "Opened";
+  running: boolean;
+}
+
+/** Detect a note tool call and pull out the linkable note id + content. Returns
+ *  null for any non-note tool so the step renders as a normal tool step. */
+function noteToolInfo(step: SessionMsg): NoteToolInfo | null {
+  const name = step.tool?.name;
+  if (name !== "create_note" && name !== "update_note" && name !== "get_note") return null;
+  const input = (step.tool?.input ?? {}) as { note_id?: string; title?: string; body?: string };
+  const running = step.tool?.status === "running";
+  if (name === "create_note") {
+    // The new id is only echoed in the tool result; parse it once it lands.
+    const noteId = /\(id (note_[\w-]+)\)/.exec(step.content)?.[1];
+    return { noteId, title: input.title, body: input.body, verb: "Created", running };
+  }
+  if (name === "update_note") {
+    const title = input.title ?? /Updated note "(.+?)"/.exec(step.content)?.[1];
+    return { noteId: input.note_id, title, body: input.body, verb: "Updated", running };
+  }
+  // get_note — the result carries the rendered note (# title … body); link it.
+  const title = /^#\s+(.+)$/m.exec(step.content)?.[1];
+  return { noteId: input.note_id, title, body: step.content || undefined, verb: "Opened", running };
+}
+
+/** A note "diff" card: shows what the agent wrote and links to the note, the
+ *  way file changes get their own card in the transcript. */
+function NoteToolCard({ info, onOpenNote }: { info: NoteToolInfo; onOpenNote?: (noteId: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const body = (info.body ?? "").trim();
+  const hasBody = body.length > 0;
+  const canOpen = !!onOpenNote && !!info.noteId;
+  return (
+    <div className="my-0.5 overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex items-center gap-2 px-2.5 py-1.5">
+        {info.running ? (
+          <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" />
+        ) : (
+          <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+        )}
+        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{info.verb} note</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{info.title ?? info.noteId ?? "note"}</span>
+        {hasBody && (
+          <button onClick={() => setOpen((v) => !v)} className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground" title={open ? "Hide" : "Show"}>
+            {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        )}
+        {canOpen && (
+          <button
+            onClick={() => onOpenNote!(info.noteId!)}
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            title="Open this note"
+          >
+            <BookOpen className="h-2.5 w-2.5" /> Open note
+          </button>
+        )}
+      </div>
+      {open && hasBody && (
+        <div className="border-t border-border/60 bg-background/40 px-3 py-2 text-[12px] text-foreground/90">
+          <Markdown content={body} />
+        </div>
       )}
     </div>
   );
