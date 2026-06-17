@@ -7,6 +7,7 @@ import { Textarea } from "./ui/textarea";
 import { Loader2 } from "lucide-react";
 import type { Project, PullRequest, Session, Note, Reference, ActivityItem } from "@app/core";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
+import { AgentInstructionPresetChips } from "./agentInstructionPresets";
 
 interface Props {
   open: boolean;
@@ -138,6 +139,7 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated, editProject
             {/* Agent instructions field */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="project-agent-instructions">Agent instructions</Label>
+              <AgentInstructionPresetChips value={agentInstructions} onApply={setAgentInstructions} disabled={submitting} />
               <Textarea
                 id="project-agent-instructions"
                 placeholder="How should the agent synthesize this project? e.g. “Focus on what PRs are in flight for my status.”"
