@@ -16,9 +16,13 @@ runs:
         Xvfb :99 -screen 0 1280x960x24 &
         echo "DISPLAY=:99" >> $GITHUB_ENV
 
+    # Pin Node via .nvmrc (single source of truth). 'latest' previously pulled
+    # in brand-new majors (e.g. Node 26) that have no prebuilt better-sqlite3
+    # binary, so install fell back to a source build that fails against the
+    # newer V8 — breaking every CI run at the install step.
     - uses: actions/setup-node@v4
       with:
-        node-version: 'latest'
+        node-version-file: '.nvmrc'
 
     - name: Check if renderer directory exists
       id: check-renderer
@@ -45,9 +49,9 @@ runs:
         fi
       shell: bash
 
-    # Newer npm (shipped with Node "latest") gates dependency install scripts
-    # behind an allow-list and skips Electron's `postinstall`, so its platform
-    # binary is never downloaded. The main/preload Vite configs introspect
+    # Newer npm gates dependency install scripts behind an allow-list and skips
+    # Electron's `postinstall`, so its platform binary is never downloaded. The
+    # main/preload Vite configs introspect
     # versions via `npx electron`, and the boot smoke test launches the real
     # app, so run Electron's installer explicitly.
     #
