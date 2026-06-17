@@ -71,8 +71,8 @@ export class MockDataSource implements DataSource {
     return null;
   }
 
-  async getGithubStatus(): Promise<{ connected: boolean }> {
-    return { connected: false };
+  async getGithubStatus(): Promise<{ connected: boolean; oauthAvailable: boolean }> {
+    return { connected: false, oauthAvailable: false };
   }
 
   // ---- M4.2 — GitHub connect flow (stub) ----

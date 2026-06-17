@@ -9,11 +9,51 @@ const GITHUB_REDIRECT_PORT = 39876; // Fixed port for OAuth callback
 export class GitHubAuth {
   #authInProgress = false; // Prevent concurrent OAuth flows
 
+  /** Whether the browser OAuth flow can run (a GitHub OAuth App client id is
+   *  configured). Without it the authorize URL has an empty client_id and
+   *  GitHub returns a 404, so the UI offers the personal-access-token path. */
+  isOAuthConfigured(): boolean {
+    return GITHUB_CLIENT_ID.length > 0;
+  }
+
+  /**
+   * Validate a personal access token against the GitHub API and, if valid,
+   * store it. Returns the authenticated login on success.
+   */
+  async setToken(token: string): Promise<{ connected: boolean; login?: string; error?: string }> {
+    const trimmed = token.trim();
+    if (!trimmed) return { connected: false, error: "Token is empty." };
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${trimmed}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "Multiplex-Electron",
+        },
+      });
+      if (!res.ok) {
+        const detail = res.status === 401 ? "Invalid or expired token." : `GitHub returned ${res.status}.`;
+        return { connected: false, error: detail };
+      }
+      const user = (await res.json()) as { login?: string };
+      configStore.setGitHubToken(trimmed);
+      return { connected: true, login: user.login };
+    } catch (err) {
+      return { connected: false, error: err instanceof Error ? err.message : "Network error." };
+    }
+  }
+
   /**
    * Start the GitHub OAuth flow.
    * Opens system browser → user authenticates → local server captures code → exchanges for token.
    */
   async startOAuth(): Promise<{ success: boolean }> {
+    if (!this.isOAuthConfigured()) {
+      // No client id → opening the authorize URL would 404. Caller should use
+      // the token path instead.
+      console.warn("GitHub OAuth not configured (GITHUB_OAUTH_CLIENT_ID unset) — skipping browser flow");
+      return { success: false };
+    }
     if (this.#authInProgress) {
       console.warn("GitHub OAuth already in progress — ignoring duplicate call");
       return { success: false };

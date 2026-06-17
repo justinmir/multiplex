@@ -8,6 +8,12 @@ export function registerGitHubAuthHandlers() {
   // Initiate OAuth flow (async — returns immediately, resolves when user completes)
   handle("github:connect", async () => githubAuth.startOAuth());
 
-  // Check connection status
-  handle("github:get-status", () => ({ connected: configStore.isGitHubConnected() }));
+  // Validate + store a personal access token (the token never leaves main).
+  handle("github:set-token", async (req) => githubAuth.setToken(req.token));
+
+  // Check connection status + whether the browser OAuth flow is even available.
+  handle("github:get-status", () => ({
+    connected: configStore.isGitHubConnected(),
+    oauthAvailable: githubAuth.isOAuthConfigured(),
+  }));
 }

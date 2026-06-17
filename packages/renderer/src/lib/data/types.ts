@@ -25,7 +25,7 @@ export interface DataSource {
   // writes (M2.5 — project management + sync)
   upsertProject(project: Project): Promise<Project>;
   syncProject(projectId: string): Promise<Project | null>;
-  getGithubStatus(): Promise<{ connected: boolean }>;
+  getGithubStatus(): Promise<{ connected: boolean; oauthAvailable: boolean }>;
 
   // M4.2 — GitHub connect flow
   connectGitHub(): Promise<{ success: boolean }>;
