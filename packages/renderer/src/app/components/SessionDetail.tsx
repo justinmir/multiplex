@@ -10,6 +10,8 @@ import { useDataMutations } from "../../lib/data/DataProvider.js";
 import { SessionStateIndicator, SessionStateLabel, sessionStateInfo } from "./SessionStateBadge";
 import { ReferenceRow } from "./tabs/ReferencesTab";
 import { formatRelativeTime } from "../../lib/format/time.js";
+import { Markdown } from "../../lib/markdown/Markdown.js";
+import { useStickToBottom } from "../../lib/session/useStickToBottom.js";
 
 interface Props {
   /** Optional parent project name. When set, shows a small breadcrumb above the title. */
@@ -90,6 +92,13 @@ export function SessionDetail({
     { id: "references", label: "References", icon: BookOpen, count: references.length || undefined },
   ];
 
+  // Auto-scroll the conversation as thinking/responses stream in. The signal
+  // changes whenever a message/step is added or the trailing one grows.
+  const lastMsg = session?.messages[session.messages.length - 1];
+  const lastStep = liveSteps[liveSteps.length - 1];
+  const scrollSignal = `${session?.id ?? ""}:${session?.messages.length ?? 0}:${lastMsg?.content.length ?? 0}:${liveSteps.length}:${lastStep?.content.length ?? 0}`;
+  const { scrollRef, onScroll } = useStickToBottom(scrollSignal);
+
   const openRailAt = (id: RailTab) => {
     setRailTab(id);
     setRailOpen(true);
@@ -151,7 +160,7 @@ export function SessionDetail({
       <div className="flex min-h-0 flex-1">
         {/* Conversation column */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 overflow-y-auto">
+          <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
             {!session ? (
               <NewSessionPane projectName={projectName} starterPrompts={starterPrompts} draft={draft} setDraft={setDraft} />
             ) : (
@@ -493,7 +502,9 @@ function Message({ role, content, ts }: { role: SessionMsg["role"]; content: str
           <span className="text-muted-foreground/40">·</span>
           <span>{formatRelativeTime(ts)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">{content}</p>
+        {role === "agent"
+          ? <Markdown content={content} />
+          : <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">{content}</p>}
       </div>
     </div>
   );

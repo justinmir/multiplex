@@ -8,10 +8,13 @@ const MOCK_MODELS = [
 
 const CANNED_RESPONSE = [
   "I'll start by analyzing the codebase to understand the current structure.",
-  "Looking at the relevant files, I can see we need to make changes to three modules.",
-  "Let me create a plan:\n1. Update the interface definitions\n2. Implement the new handler\n3. Add tests for the changed behavior",
-  "Now implementing the changes...",
+  "## Plan\n\nHere's what I'll do:\n\n1. Update the **interface definitions**\n2. Implement the new `handler`\n3. Add tests for the changed behavior",
+  "Here's the core change:\n\n```ts\nexport function handle(req: Request): Response {\n  return router.dispatch(req);\n}\n```",
+  "Done — all three modules updated and tests pass. See `src/index.ts` for the entry point and the [docs](https://example.com) for details.",
 ];
+
+/** Clean markdown used for the final (persisted) agent message. */
+const CANNED_MARKDOWN = CANNED_RESPONSE.join("\n\n");
 
 const DELTA_CHUNKS = CANNED_RESPONSE.flatMap((segment) => {
   const chunks: string[] = [];
@@ -149,10 +152,8 @@ export class MockHarness implements Harness {
       run.timers.push(t);
     }
 
-    // Phase 2: stream the canned response as deltas
-    let cumulative = "";
+    // Phase 2: stream the canned response as deltas (live typing effect only).
     for (let i = 0; i < DELTA_CHUNKS.length; i++) {
-      cumulative += (i === 0 ? "" : " ") + DELTA_CHUNKS[i];
       emit(180 + i * 60, { type: "message_delta", role: "agent", delta: `${DELTA_CHUNKS[i]} ` });
     }
 
@@ -161,8 +162,9 @@ export class MockHarness implements Harness {
     emit(180 + DELTA_CHUNKS.length * 60 + 50, { type: "tool_use", name: "read_file", input: { path: "src/index.ts" }, id: toolId });
     emit(180 + DELTA_CHUNKS.length * 60 + 120, { type: "tool_result", id: toolId, content: "// File contents loaded successfully\n// 42 lines read" });
 
-    // Phase 4: final message (the complete accumulated text)
-    emit(180 + DELTA_CHUNKS.length * 60 + 200, { type: "message", role: "agent", content: cumulative.trim(), final: true });
+    // Phase 4: final message — the clean markdown (the streamed deltas above are
+    // just for the live typing effect; this is what gets persisted/rendered).
+    emit(180 + DELTA_CHUNKS.length * 60 + 200, { type: "message", role: "agent", content: CANNED_MARKDOWN, final: true });
 
     // Phase 5: usage + done
     emit(180 + DELTA_CHUNKS.length * 60 + 280, { type: "usage", tokens: 1432, costUsd: 0.04, durationMs: 2200 });
