@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ProjectsSidebar } from "../app/components/ProjectsSidebar";
 import { ProjectView } from "../app/components/ProjectView";
 import { HomeView } from "../app/components/HomeView";
@@ -149,17 +149,11 @@ export function AppShell() {
     await mutations.upsertSessionReference(sessionId, ref);
   };
 
-  // M3.4 — agent workflow foundation handlers (M-A5 runtime)
+  // M3.4 — agent workflow foundation handlers (M-A5 runtime). The runtime
+  // decides whether to run the message now or queue it (single-threaded turns),
+  // so the renderer just forwards it.
   const sendMessageToSession = async (messageText: string) => {
     if (!session) return;
-    // Single-threaded: if a turn is already in progress, queue the message
-    // (dispatched when the turn ends) instead of sending it into a busy harness.
-    if (busyRef.current || session.status === "running") {
-      enqueue(session.id, messageText);
-      return;
-    }
-    busyRef.current = true;
-    setLiveSteps([]); // start a fresh live turn
     await mutations.sendToSession(session.id, messageText);
   };
 
@@ -196,63 +190,9 @@ export function AppShell() {
   // shown below the persisted transcript until the turn is flushed to the store.
   const [liveSteps, setLiveSteps] = useState<SessionMsg[]>([]);
 
-  // Per-session message queue. While a turn runs, sends are queued and the next
-  // one is dispatched when the turn ends (single-threaded), so messages never
-  // get sent into a busy harness (which would time out). `busyRef` guards the
-  // window between dispatch and the persisted status flipping to "running".
-  const [queues, setQueues] = useState<Map<string, string[]>>(new Map());
-  const queuesRef = useRef(queues);
-  useEffect(() => { queuesRef.current = queues; }, [queues]);
-  const busyRef = useRef(false);
-
-  const enqueue = (sid: string, text: string) =>
-    setQueues((prev) => { const m = new Map(prev); m.set(sid, [...(m.get(sid) ?? []), text]); return m; });
-
-  // Called at a turn boundary: send the next queued message, or clear the busy
-  // flag if the queue is empty. Owns all busyRef writes so callers (incl.
-  // effects) never have to mutate the ref themselves.
-  const dispatchNext = (sid: string) => {
-    const q = queuesRef.current.get(sid) ?? [];
-    if (q.length === 0) { busyRef.current = false; return; }
-    const [next, ...rest] = q;
-    setQueues((prev) => { const m = new Map(prev); if (rest.length) m.set(sid, rest); else m.delete(sid); return m; });
-    busyRef.current = true;
-    setLiveSteps([]);
-    mutations.sendToSession(sid, next).catch((e) => console.error("Failed to send queued message:", e));
-  };
-
-  // Jump a queued message to the front and interrupt the current turn so it runs
-  // next; the done:stopped event then dispatches it.
-  const interruptQueued = async (index: number) => {
-    if (!session) return;
-    const sid = session.id;
-    setQueues((prev) => {
-      const q = prev.get(sid) ?? [];
-      if (index < 0 || index >= q.length) return prev;
-      const m = new Map(prev);
-      m.set(sid, [q[index], ...q.filter((_, i) => i !== index)]);
-      return m;
-    });
-    const wasRunning = busyRef.current || session.status === "running";
-    await mutations.stopSessionViaRuntime(sid).catch(() => {});
-    // If nothing was running to stop, there's no done event — dispatch now.
-    if (!wasRunning) setTimeout(() => dispatchNext(sid), 0);
-  };
-
-  const deleteQueued = (index: number) => {
-    if (!session) return;
-    const sid = session.id;
-    setQueues((prev) => {
-      const q = prev.get(sid) ?? [];
-      const rest = q.filter((_, i) => i !== index);
-      const m = new Map(prev); if (rest.length) m.set(sid, rest); else m.delete(sid); return m;
-    });
-  };
-
-  // Reset the live turn (and busy flag) when switching sessions.
+  // Reset the live turn when switching sessions.
   useEffect(() => {
     setLiveSteps([]);
-    busyRef.current = false;
   }, [selectedSessionId]);
 
   useSessionStream(session?.id ?? null, (event) => {
@@ -297,19 +237,6 @@ export function AppShell() {
     }
   }, [persistedEndsWithAgent, liveSteps.length]);
 
-  // When a turn ends (the SAME session's status leaves "running"), dispatch the
-  // next queued message (or clear the busy flag if the queue is empty).
-  const prevStatusRef = useRef<{ id?: string; status?: string }>({});
-  useEffect(() => {
-    const id = session?.id;
-    const status = session?.status;
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = { id, status };
-    if (session && prev.id === id && prev.status === "running" && status !== "running") {
-      dispatchNext(session.id);
-    }
-  }, [session?.status, session?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // M-C4 — live working-tree diffs for the active standalone session.
   const { changes: worktreeChanges } = useChanges(session?.id ?? null, view === "session");
   // M-B3 — enrich the session's linked PRs with live GitHub detail. Skip the
@@ -320,7 +247,8 @@ export function AppShell() {
   // Show the live turn only while the agent's reply hasn't been persisted yet,
   // so the live stream transitions seamlessly into the saved transcript.
   const visibleLiveSteps = !!session && !persistedEndsWithAgent ? liveSteps : [];
-  const sessionQueue = session ? (queues.get(session.id) ?? []) : [];
+  // The queue is owned by the runtime and persisted on the session.
+  const sessionQueue = session?.queuedMessages ?? [];
 
   // Determine if we're inside a project session view (for sidebar highlight)
   const selectedProjectSessionId = view === "project" ? projectInitialSession : null;
@@ -372,8 +300,8 @@ export function AppShell() {
             session={session}
             liveSteps={visibleLiveSteps}
             queuedMessages={sessionQueue}
-            onInterruptQueued={interruptQueued}
-            onDeleteQueued={deleteQueued}
+            onInterruptQueued={(i) => session && mutations.interruptQueuedMessage(session.id, i)}
+            onDeleteQueued={(i) => session && mutations.removeQueuedMessage(session.id, i)}
             prs={enrichedPRs}
             worktreeChanges={worktreeChanges}
             currentModel={settings?.defaultModel}

@@ -52,6 +52,9 @@ export class SessionRuntime {
   /** Per-session accumulator for the current thinking block (reasoning deltas)
    *  not yet committed to `pendingTurn`. */
   private pendingThinking = new Map<string, string>();
+  /** Sessions with a turn currently in progress. Sends that arrive while a
+   *  session is here are queued; the queue drains when the turn ends. */
+  private activeTurns = new Set<string>();
 
   private workspaces?: WorkspaceManager;
   private forge?: ForgeService;
@@ -225,10 +228,12 @@ export class SessionRuntime {
     }
 
     try {
+      this.activeTurns.add(sessionId);
       const ctx = await this.prepareWorkspace(sessionId, input.projectId ?? null, harness);
       await this.beginRun(harness, { sessionId, prompt: input.prompt, model, ...ctx });
     } catch (err) {
       // Harness failed to start — mark session as failed
+      this.activeTurns.delete(sessionId);
       const existing = await this.repo.getSession(sessionId);
       if (existing) {
         await this.repo.upsertSession({ ...existing, status: "failed" }, input.projectId ?? null);
@@ -342,39 +347,105 @@ export class SessionRuntime {
     this.lastActivity.set(input.sessionId, Date.now());
   }
 
-  /** Send a follow-up message to a session. If the in-memory run is gone (turn
-   *  ended, harness crashed, or the app restarted), transparently revive a new
-   *  run for the existing session instead of failing — sessions feel durable. */
+  /** Send a message to a session. Sessions are single-threaded: if a turn is
+   *  already in progress, the message is queued (persisted) and drained when the
+   *  turn ends. Otherwise the turn starts immediately. If the in-memory run is
+   *  gone (turn ended, harness crashed, app restarted), a new run is revived. */
   async sendMessage(sessionId: string, text: string): Promise<void> {
-    // Persist the user message first so it shows immediately and survives revival.
     const existing = await this.repo.getSession(sessionId);
     if (!existing) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    const userMsg: SessionMsg = { role: "user", content: text, ts: new Date().toISOString() };
     const projectId = await this.repo.getSessionProjectId(existing.id);
+
+    if (this.activeTurns.has(sessionId)) {
+      // Busy — queue the message (persisted, so it survives restart) instead of
+      // sending it into a running turn.
+      const queued = [...(existing.queuedMessages ?? []), text];
+      await this.repo.upsertSession({ ...existing, queuedMessages: queued }, projectId);
+      this.emitFn("data:changed", { kind: "session" });
+      return;
+    }
+
+    // Persist the user message + running status, then run the turn.
+    const userMsg: SessionMsg = { role: "user", content: text, ts: new Date().toISOString() };
     await this.repo.upsertSession(
       { ...existing, messages: [...existing.messages, userMsg], status: "running" },
       projectId,
     );
     this.emitFn("data:changed", { kind: "session" });
+    await this.deliverToHarness(sessionId, text, projectId, existing.model);
+  }
 
-    const run = this.runs.get(sessionId);
-    if (run) {
-      this.resetTurnBuffer(sessionId);
-      await run.send(text);
-      this.lastActivity.set(sessionId, Date.now());
-      return;
+  /** Send a prompt to the session's harness, reviving a run if none is live.
+   *  Marks the turn active; does NOT persist the user message (callers do). */
+  private async deliverToHarness(sessionId: string, text: string, projectId: string | null, model?: string): Promise<void> {
+    this.activeTurns.add(sessionId);
+    try {
+      const run = this.runs.get(sessionId);
+      if (run) {
+        this.resetTurnBuffer(sessionId);
+        await run.send(text);
+        this.lastActivity.set(sessionId, Date.now());
+        return;
+      }
+      const settings = this.settingsFn();
+      const harness = getHarness(settings);
+      if (!harness) throw new Error(`No harness registered for id "${settings.harnessId ?? "mock"}"`);
+      const ctx = await this.prepareWorkspace(sessionId, projectId, harness);
+      await this.beginRun(harness, { sessionId, prompt: text, model: model ?? settings.defaultModel, ...ctx });
+    } catch (err) {
+      this.activeTurns.delete(sessionId); // never leave the session stuck "busy"
+      throw err;
     }
+  }
 
-    // No live run — revive one. The new run uses this message as its prompt and
-    // re-attaches the session's workspace (worktrees are reused if they exist).
-    const settings = this.settingsFn();
-    const harness = getHarness(settings);
-    if (!harness) throw new Error(`No harness registered for id "${settings.harnessId ?? "mock"}"`);
-    const model = existing.model || settings.defaultModel;
-    const ctx = await this.prepareWorkspace(sessionId, projectId, harness);
-    await this.beginRun(harness, { sessionId, prompt: text, model, ...ctx });
+  /** Send the next queued message for a session, if any, once its turn has ended.
+   *  Drives the queue for background sessions and after restart. */
+  private async dispatchQueued(sessionId: string): Promise<void> {
+    if (this.activeTurns.has(sessionId)) return; // a turn is (already) running
+    const existing = await this.repo.getSession(sessionId);
+    if (!existing) return;
+    const queue = existing.queuedMessages ?? [];
+    if (queue.length === 0) return;
+    const [next, ...rest] = queue;
+    const projectId = await this.repo.getSessionProjectId(sessionId);
+    const userMsg: SessionMsg = { role: "user", content: next, ts: new Date().toISOString() };
+    await this.repo.upsertSession(
+      { ...existing, queuedMessages: rest, messages: [...existing.messages, userMsg], status: "running" },
+      projectId,
+    );
+    this.emitFn("data:changed", { kind: "session" });
+    await this.deliverToHarness(sessionId, next, projectId, existing.model);
+  }
+
+  /** Run a queued message now, interrupting the current turn (it's moved to the
+   *  front of the queue, then the running turn is stopped so it dispatches next). */
+  async interruptQueued(sessionId: string, index: number): Promise<void> {
+    const existing = await this.repo.getSession(sessionId);
+    if (!existing) return;
+    const queue = existing.queuedMessages ?? [];
+    if (index < 0 || index >= queue.length) return;
+    const reordered = [queue[index], ...queue.filter((_, i) => i !== index)];
+    const projectId = await this.repo.getSessionProjectId(sessionId);
+    await this.repo.upsertSession({ ...existing, queuedMessages: reordered }, projectId);
+    this.emitFn("data:changed", { kind: "session" });
+    if (this.activeTurns.has(sessionId)) {
+      await this.stopSession(sessionId); // → done → dispatchQueued sends the front
+    } else {
+      this.enqueuePersist(sessionId, () => this.dispatchQueued(sessionId));
+    }
+  }
+
+  /** Remove a queued message without running it. */
+  async removeQueued(sessionId: string, index: number): Promise<void> {
+    const existing = await this.repo.getSession(sessionId);
+    if (!existing) return;
+    const queue = existing.queuedMessages ?? [];
+    if (index < 0 || index >= queue.length) return;
+    const projectId = await this.repo.getSessionProjectId(sessionId);
+    await this.repo.upsertSession({ ...existing, queuedMessages: queue.filter((_, i) => i !== index) }, projectId);
+    this.emitFn("data:changed", { kind: "session" });
   }
 
   /** Stop the agent for a session. */
@@ -454,6 +525,14 @@ export class SessionRuntime {
       if (recovered.length > 0) {
         this.emitFn("data:changed", { kind: "session" });
       }
+
+      // Drain any messages queued before the restart: kick off the first queued
+      // message for each idle session (the rest follow as turns complete).
+      for (const session of sessions) {
+        if ((session.queuedMessages?.length ?? 0) > 0 && !this.activeTurns.has(session.id)) {
+          this.enqueuePersist(session.id, () => this.dispatchQueued(session.id));
+        }
+      }
     } catch { /* ignore recovery errors */ }
 
     return recovered;
@@ -506,6 +585,7 @@ export class SessionRuntime {
 
       this.runs.delete(sessionId);
       this.lastActivity.delete(sessionId);
+      this.activeTurns.delete(sessionId);
     } catch { /* ignore crash handler errors */ }
   }
 
@@ -533,6 +613,13 @@ export class SessionRuntime {
     }
 
     this.enqueuePersist(sessionId, () => this.persistEvent(sessionId, event));
+
+    // The turn ended — mark it inactive and drain the next queued message (if any)
+    // after the done event has been persisted. Works for background sessions too.
+    if (event.type === "done") {
+      this.activeTurns.delete(sessionId);
+      this.enqueuePersist(sessionId, () => this.dispatchQueued(sessionId));
+    }
   }
 
   /** Serialize repo mutations per session via a promise chain. */

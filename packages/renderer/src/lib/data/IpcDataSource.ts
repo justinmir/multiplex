@@ -108,6 +108,14 @@ export class IpcDataSource implements DataSource {
     return call("session:stop", { sessionId });
   }
 
+  async interruptQueuedMessage(sessionId: string, index: number): Promise<void> {
+    return call("session:queue:interrupt", { sessionId, index });
+  }
+
+  async removeQueuedMessage(sessionId: string, index: number): Promise<void> {
+    return call("session:queue:remove", { sessionId, index });
+  }
+
   // ---- M-A8 — Harness health + model list ----
 
   async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {

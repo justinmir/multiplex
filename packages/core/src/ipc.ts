@@ -47,6 +47,10 @@ export interface IpcContract {
   };
   "session:send": { req: { sessionId: string; message: string }; res: void };
   "session:stop": { req: { sessionId: string }; res: void };
+  // Queue management: run a queued message now (interrupting the current turn),
+  // or remove it from the queue.
+  "session:queue:interrupt": { req: { sessionId: string; index: number }; res: void };
+  "session:queue:remove": { req: { sessionId: string; index: number }; res: void };
 
   // M-A8 — Harness health + model list
   "harness:health": { req: { harnessId: string }; res: { ok: boolean; version?: string; detail?: string } };

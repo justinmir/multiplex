@@ -81,6 +81,9 @@ interface DataMutationValue {
   sendToSession(sessionId: string, message: string): Promise<void>;
   /** Stop the agent for a session via runtime (replaces optimistic stopAgent). */
   stopSessionViaRuntime(sessionId: string): Promise<void>;
+  /** Run a queued message now (interrupting the current turn), or remove it. */
+  interruptQueuedMessage(sessionId: string, index: number): Promise<void>;
+  removeQueuedMessage(sessionId: string, index: number): Promise<void>;
 
   // M-A8 — Harness health + model list
   /** Check harness health. */
@@ -504,6 +507,16 @@ export function DataProvider({
         toast.error(`Failed to stop agent: ${msg}`);
         throw err;
       }
+    },
+
+    async interruptQueuedMessage(sessionId: string, index: number): Promise<void> {
+      try { await activeSource.interruptQueuedMessage(sessionId, index); }
+      catch (err) { console.error("Failed to interrupt queued message:", err); }
+    },
+
+    async removeQueuedMessage(sessionId: string, index: number): Promise<void> {
+      try { await activeSource.removeQueuedMessage(sessionId, index); }
+      catch (err) { console.error("Failed to remove queued message:", err); }
     },
 
     // ---- M-A8 — Harness health + model list ----

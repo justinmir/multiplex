@@ -38,6 +38,9 @@ export interface DataSource {
   startSession(input: { sessionId?: string; prompt: string; projectId?: string | null; model?: string }): Promise<{ sessionId: string }>;
   sendToSession(sessionId: string, message: string): Promise<void>;
   stopSession(sessionId: string): Promise<void>;
+  /** Queue management for a session's pending messages. */
+  interruptQueuedMessage(sessionId: string, index: number): Promise<void>;
+  removeQueuedMessage(sessionId: string, index: number): Promise<void>;
 
   // M-A8 — Harness health + model list
   harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;

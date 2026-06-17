@@ -117,6 +117,9 @@ export interface Session {
   tokens: number;
   cost: number;
   messages: SessionMsg[];
+  /** Messages queued while a turn is in progress; drained one at a time (FIFO)
+   *  by the runtime, including for background sessions and across restarts. */
+  queuedMessages?: string[];
   /** Optional per-session references the agent should consult. */
   references?: Reference[];
 }

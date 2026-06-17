@@ -22,6 +22,14 @@ export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
     return runtime.stopSession(req.sessionId);
   });
 
+  handle("session:queue:interrupt", async (req) => {
+    return runtime.interruptQueued(req.sessionId, req.index);
+  });
+
+  handle("session:queue:remove", async (req) => {
+    return runtime.removeQueued(req.sessionId, req.index);
+  });
+
   // M-A8 — harness health check
   handle("harness:health", async (req) => {
     const harness = createHarness({ id: req.harnessId } as HarnessConfig);
