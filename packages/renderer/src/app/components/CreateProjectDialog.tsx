@@ -11,13 +11,15 @@ import { useDataMutations } from "../../lib/data/DataProvider.js";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called with the new project's id after a successful create, so the caller
+   *  can open it immediately. */
+  onCreated?: (projectId: string) => void;
 }
 
-export function CreateProjectDialog({ open, onOpenChange }: Props) {
+export function CreateProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const mutations = useDataMutations();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [githubRepo, setGithubRepo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,28 +27,13 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
 
     if (!name.trim() || submitting) return;
 
-    // Parse GitHub repo "owner/repo" into separate fields
-    let githubOwner: string | undefined;
-    let githubRepoName: string | undefined;
-    const trimmed = githubRepo.trim();
-    if (trimmed) {
-      const parts = trimmed.split("/").map((s) => s.trim());
-      if (parts.length >= 2) {
-        githubOwner = parts[0];
-        githubRepoName = parts.slice(1).join("/"); // support nested paths like org/team/repo
-      } else if (parts.length === 1) {
-        // Single segment — treat as repo name with no owner
-        githubRepoName = parts[0];
-      }
-    }
-
     const now = new Date().toISOString();
     const project: Project = {
       id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: name.trim(),
       slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
       description: description.trim() || "No description provided.",
-      repos: githubOwner && githubRepoName ? [`${githubOwner}/${githubRepoName}`] : [],
+      repos: [],
       status: "active",
       color: "#6366f1",
       progress: 0,
@@ -65,11 +52,11 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
     setSubmitting(true);
     try {
       await mutations.upsertProject(project);
-      // Reset form and close dialog on success
+      // Reset form, close, and open the new project immediately.
       setName("");
       setDescription("");
-      setGithubRepo("");
       onOpenChange(false);
+      onCreated?.(project.id);
     } catch (err) {
       console.error("Failed to create project:", err);
     } finally {
@@ -82,7 +69,6 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
     if (!isOpen && !submitting) {
       setName("");
       setDescription("");
-      setGithubRepo("");
     }
     onOpenChange(isOpen);
   };
@@ -93,7 +79,7 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
           <DialogDescription>
-            Add a new project to track. Optionally link it to a GitHub repository for live PR data.
+            Add a new project to organize sessions and notes.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,17 +112,6 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
               />
             </div>
 
-            {/* GitHub Repo field */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="project-github-repo">GitHub Repository</Label>
-              <Input
-                id="project-github-repo"
-                placeholder="owner/repo"
-                value={githubRepo}
-                onChange={(e) => setGithubRepo(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
           </div>
 
           {/* Actions */}

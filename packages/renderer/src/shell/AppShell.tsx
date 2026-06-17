@@ -328,7 +328,7 @@ export function AppShell() {
       <SettingsPanel open={settingsOpen} onOpenChange={(open) => setSettingsOpen(open)} />
 
       {/* M5.2 — Create project dialog */}
-      <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} />
+      <CreateProjectDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} onCreated={(id) => openProject(id, null)} />
 
       {/* M6.3 — Global search palette (⌘K) */}
       <SearchPalette
