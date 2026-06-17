@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type {
   ActivityItem, Note, Project, Reference, RefScope, Repository, Session,
 } from "@app/core";
-import { seedProjects, seedStandaloneSessions } from "./seed.js";
+import { seedProjects, seedStandaloneSessions, seedEnabled } from "./seed.js";
 
 /**
  * SQLite-backed Repository (M7.2). Same interface as JsonRepository, but writes
@@ -90,6 +90,7 @@ export class SqliteRepository implements Repository {
   }
 
   private seed(): void {
+    if (!seedEnabled()) return; // start empty unless MULTIPLEX_SEED is set
     const tx = this.db.transaction(() => {
       for (const p of seedProjects) {
         this.putProject(p);

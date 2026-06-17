@@ -30,6 +30,10 @@ export class GitHubForgeService implements ForgeService {
   }
 
   async getPR(repo: string, number: number): Promise<PullRequest | null> {
+    // Live enrichment is best-effort: with no token connected there is nothing
+    // to fetch, so return null quietly rather than throwing/logging an error
+    // for what is an expected, non-failure state.
+    if (!configStore.isGitHubConnected()) return null;
     const { owner, name } = splitRepo(repo);
     try {
       const ok = this.octokit();

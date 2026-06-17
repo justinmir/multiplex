@@ -220,8 +220,10 @@ export function AppShell() {
 
   // M-C4 — live working-tree diffs for the active standalone session.
   const { changes: worktreeChanges } = useChanges(session?.id ?? null, view === "session");
-  // M-B3 — enrich the session's linked PRs with live GitHub detail.
-  const enrichedPRs = usePrDetails(sessionPRs, view === "session");
+  // M-B3 — enrich the session's linked PRs with live GitHub detail. Skip the
+  // live fetch when GitHub isn't connected — there's nothing to fetch, and the
+  // stored linked PRs already render fine on their own.
+  const enrichedPRs = usePrDetails(sessionPRs, view === "session" && mutations.githubConnected);
 
   // Show the overlay only while the agent's reply hasn't been persisted yet,
   // so the live stream transitions seamlessly into the saved message.
