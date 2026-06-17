@@ -3,6 +3,17 @@ import type { Note, Project, Reference, Session, ActivityItem } from "@app/core"
 const NOW = Date.now();
 const min = 60_000, hr = 3_600_000, day = 86_400_000;
 
+/**
+ * Whether to populate a fresh/empty store with the demo projects + sessions
+ * below. Off by default so a clean install (or a cleared database) starts
+ * empty and ready for real use; set MULTIPLEX_SEED=1 to load the demo data
+ * (handy for screenshots / first-run walkthroughs).
+ */
+export function seedEnabled(): boolean {
+  const v = process.env.MULTIPLEX_SEED;
+  return v === "1" || v === "true";
+}
+
 /** Minimal seed projects — mirrors renderer mockData, computed at module load. */
 export const seedProjects: Project[] = [
   {

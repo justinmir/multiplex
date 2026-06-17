@@ -4,7 +4,7 @@ import { join, dirname } from "node:path";
 import type { ActivityItem, Note, Project, Reference, RefScope, Session } from "@app/core";
 import { InMemoryRepository } from "./InMemoryRepository.js";
 import { DB_PATH, ensureDir } from "./paths.js";
-import { seedProjects, seedStandaloneSessions } from "./seed.js";
+import { seedProjects, seedStandaloneSessions, seedEnabled } from "./seed.js";
 
 /** A note serialized with its project scope so the composite key can be reconstructed. */
 interface NoteEntry {
@@ -113,6 +113,7 @@ export class JsonRepository extends InMemoryRepository {
   }
 
   private seed(): void {
+    if (!seedEnabled()) return; // start empty unless MULTIPLEX_SEED is set
     for (const p of seedProjects) {
       this.projects.set(p.id, p);
       if (p.sessions?.length) {

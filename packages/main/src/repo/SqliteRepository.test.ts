@@ -20,12 +20,31 @@ function session(id: string): Session {
   return { id, title: id, status: "running", model: "m", workspaces: [], startedAt: "", createdAtMs: 1, durationMin: 0, tokens: 0, cost: 0, messages: [] };
 }
 
-test("seeds on first run", async () => {
-  const repo = new SqliteRepository(freshDb());
-  const projects = await repo.listProjects();
-  assert.ok(projects.length >= 2, "seed projects present");
-  const standalone = await repo.listSessions({ projectId: null });
-  assert.ok(standalone.length >= 1, "seed standalone sessions present");
+test("seeds on first run when MULTIPLEX_SEED is set", async () => {
+  const prev = process.env.MULTIPLEX_SEED;
+  process.env.MULTIPLEX_SEED = "1";
+  try {
+    const repo = new SqliteRepository(freshDb());
+    const projects = await repo.listProjects();
+    assert.ok(projects.length >= 2, "seed projects present");
+    const standalone = await repo.listSessions({ projectId: null });
+    assert.ok(standalone.length >= 1, "seed standalone sessions present");
+  } finally {
+    if (prev === undefined) delete process.env.MULTIPLEX_SEED;
+    else process.env.MULTIPLEX_SEED = prev;
+  }
+});
+
+test("starts empty on first run without MULTIPLEX_SEED", async () => {
+  const prev = process.env.MULTIPLEX_SEED;
+  delete process.env.MULTIPLEX_SEED;
+  try {
+    const repo = new SqliteRepository(freshDb());
+    assert.equal((await repo.listProjects()).length, 0, "no seed projects");
+    assert.equal((await repo.listSessions({ projectId: null })).length, 0, "no seed sessions");
+  } finally {
+    if (prev !== undefined) process.env.MULTIPLEX_SEED = prev;
+  }
 });
 
 test("hydrates notes/references/sessions/activity onto a project", async () => {

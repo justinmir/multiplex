@@ -324,8 +324,9 @@ function OverviewRail({ session, prs, onMergePR, onOpenGitHub, onOpenPR }: { ses
 }
 
 function PRSummaryCard({ pr, onMergePR, onOpenGitHub }: { pr: PullRequest; onMergePR?: (owner: string, repo: string, prNumber: number) => void; onOpenGitHub?: (pr: PullRequest) => void }) {
-  const checksFailing = (pr.checkRuns ?? []).some((c) => c.status === "failure") || pr.checks.failed > 0;
-  const checksPending = (pr.checkRuns ?? []).some((c) => c.status === "pending") || pr.checks.pending > 0;
+  const checks = pr.checks ?? { passed: 0, failed: 0, pending: 0 };
+  const checksFailing = (pr.checkRuns ?? []).some((c) => c.status === "failure") || checks.failed > 0;
+  const checksPending = (pr.checkRuns ?? []).some((c) => c.status === "pending") || checks.pending > 0;
   const verdict = pr.reviewVerdict ?? "pending";
   const canMerge = pr.mergeable === "clean" && verdict === "approved" && !checksFailing && !checksPending && pr.status !== "merged";
 
@@ -397,7 +398,7 @@ function VerdictPill({ verdict }: { verdict: "pending" | "approved" | "changes_r
 }
 
 function CheckSummary({ pr }: { pr: PullRequest }) {
-  const { failed, pending, passed } = pr.checks;
+  const { failed, pending, passed } = pr.checks ?? { passed: 0, failed: 0, pending: 0 };
   if (failed > 0) return (
     <span className="flex items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] text-destructive ring-1 ring-destructive/30">
       <XCircle className="h-2.5 w-2.5" /> {failed} failing
