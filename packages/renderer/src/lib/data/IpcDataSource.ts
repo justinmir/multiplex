@@ -124,6 +124,10 @@ export class IpcDataSource implements DataSource {
     return call("sessions:rename", { sessionId, title });
   }
 
+  async setSessionPinned(sessionId: string, pinned: boolean): Promise<void> {
+    return call("sessions:set-pinned", { sessionId, pinned });
+  }
+
   // ---- M-A8 — Harness health + model list ----
 
   async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {

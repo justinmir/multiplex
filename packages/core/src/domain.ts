@@ -123,6 +123,8 @@ export interface Session {
   startedAt: string;
   createdAtMs: number;
   archived?: boolean;
+  /** Pinned sessions sort to the top of the sidebar, independent of age. */
+  pinned?: boolean;
   durationMin: number;
   tokens: number;
   cost: number;

@@ -104,6 +104,7 @@ export class MockDataSource implements DataSource {
   async removeQueuedMessage(_sessionId: string, _index: number): Promise<void> {}
   async editSessionPrompt(_sessionId: string, _prompt: string): Promise<void> {}
   async renameSession(_sessionId: string, _title: string): Promise<void> {}
+  async setSessionPinned(_sessionId: string, _pinned: boolean): Promise<void> {}
 
   // ---- M-A8 — Harness health + model list (stubs for mock) ----
 

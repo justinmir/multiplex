@@ -45,6 +45,8 @@ export interface DataSource {
   editSessionPrompt(sessionId: string, prompt: string): Promise<void>;
   /** Rename a session. */
   renameSession(sessionId: string, title: string): Promise<void>;
+  /** Pin/unpin a session (sorts to the top of the sidebar). */
+  setSessionPinned(sessionId: string, pinned: boolean): Promise<void>;
 
   // M-A8 — Harness health + model list
   harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;

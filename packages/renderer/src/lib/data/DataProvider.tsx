@@ -88,6 +88,8 @@ interface DataMutationValue {
   editSessionPrompt(sessionId: string, prompt: string): Promise<void>;
   /** Rename a session. */
   renameSession(sessionId: string, title: string): Promise<void>;
+  /** Pin/unpin a session (sorts to the top of the sidebar). */
+  setSessionPinned(sessionId: string, pinned: boolean): Promise<void>;
 
   // M-A8 — Harness health + model list
   /** Check harness health. */
@@ -531,6 +533,11 @@ export function DataProvider({
     async renameSession(sessionId: string, title: string): Promise<void> {
       try { await activeSource.renameSession(sessionId, title); }
       catch (err) { console.error("Failed to rename session:", err); }
+    },
+
+    async setSessionPinned(sessionId: string, pinned: boolean): Promise<void> {
+      try { await activeSource.setSessionPinned(sessionId, pinned); }
+      catch (err) { console.error("Failed to pin session:", err); }
     },
 
     // ---- M-A8 — Harness health + model list ----

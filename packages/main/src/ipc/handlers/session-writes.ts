@@ -72,6 +72,15 @@ export function registerSessionWriteHandlers(repo: Repository) {
     emit("data:changed", { kind: "session" });
   });
 
+  // Pin/unpin a session (sorts to the top of the sidebar).
+  handle("sessions:set-pinned", async (req) => {
+    const existing = await repo.getSession(req.sessionId);
+    if (!existing) throw new Error(`Session not found: ${req.sessionId}`);
+    const projectId = await repo.getSessionProjectId(req.sessionId);
+    await repo.upsertSession({ ...existing, pinned: req.pinned }, projectId);
+    emit("data:changed", { kind: "session" });
+  });
+
   // Update a session's status — works for both standalone and project-linked sessions
   handle("sessions:update-status", async (req) => {
     const existing = await repo.getSession(req.sessionId);

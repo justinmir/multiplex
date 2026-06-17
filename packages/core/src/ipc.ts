@@ -24,6 +24,7 @@ export interface IpcContract {
   "sessions:create": { req: { session: Session; projectId?: string }; res: Session };
   "sessions:update-status": { req: { sessionId: string; status: SessionStatus }; res: void };
   "sessions:rename": { req: { sessionId: string; title: string }; res: void };
+  "sessions:set-pinned": { req: { sessionId: string; pinned: boolean }; res: void };
 
   // M2.2 — GitHub OAuth + connection status (the token never leaves main)
   "github:connect": { req: void; res: { success: boolean } };

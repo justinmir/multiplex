@@ -204,6 +204,7 @@ export function AppShell() {
         onOpenCreateProject={() => setCreateProjectOpen(true)}
         onEditProject={(p) => setEditingProject(p)}
         onRenameSession={(s) => setRenamingSession(s)}
+        onTogglePin={(s) => mutations.setSessionPinned(s.id, !s.pinned)}
         onOpenSearch={() => setSearchOpen(true)}
       />
       </ResizablePanel>
