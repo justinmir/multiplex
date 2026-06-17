@@ -26,6 +26,7 @@
     "lint": "npm run lint -ws --if-present",
     "validate": "npm run typecheck && npm run lint && npm run build",
     "screenshot": "npm run build && node ./scripts/screenshot.mjs",
+    "screenshots": "npm run build && node ./scripts/showcase.mjs",
     "create-renderer": "cd packages && node ./integrate-renderer/create-renderer.js",
     "integrate-renderer": "npm start --workspace @app/integrate-renderer",
     "init": "npm run create-renderer && npm run integrate-renderer && npm install --ignore-scripts"
