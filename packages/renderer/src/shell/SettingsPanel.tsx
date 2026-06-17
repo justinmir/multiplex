@@ -268,6 +268,24 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </div>
             )}
           </div>
+
+          {githubConnected && (
+            <div className="flex items-center justify-between">
+              <Label htmlFor="pr-poll-interval">Sync PR status every</Label>
+              <select
+                id="pr-poll-interval"
+                value={settings.prPollIntervalMinutes ?? 5}
+                onChange={(e) => save({ prPollIntervalMinutes: Number(e.target.value) })}
+                className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+              >
+                <option value={1}>1 minute</option>
+                <option value={5}>5 minutes</option>
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={60}>1 hour</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Intelligence Section */}

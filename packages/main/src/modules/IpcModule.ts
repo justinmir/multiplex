@@ -27,6 +27,8 @@ import { WorkspaceManager } from "../session/WorkspaceManager.js";
 import { gitService } from "../git/LocalGitService.js";
 import { repoRegistry } from "../git/RepoRegistry.js";
 import { githubForge } from "../forge/GitHubForgeService.js";
+import { PrPoller } from "../forge/PrPoller.js";
+import { configStore } from "../git/ConfigStore.js";
 import { sessionsDir } from "../repo/paths.js";
 import { SessionRuntime } from "../session/SessionRuntime.js";
 import { setSessionRuntime } from "../session/runtime.js";
@@ -101,8 +103,20 @@ export function createIpcModule(): AppModule {
       // M-C4: Real diffs across a session's materialized worktrees
       registerChangesHandlers(runtime);
 
-      // M-B3/M-B4/M-B5: live PR detail, PR actions, and PR fan-out
-      registerPrHandlers(githubForge, runtime);
+      // M-B3/M-B4/M-B5: live PR detail, PR actions, and PR fan-out.
+      // A background poller keeps PR detail cached so switching sessions never
+      // blocks on GitHub; pr:get reads the cache and a manual sync forces a
+      // refresh. Open, non-merged PRs are refreshed on an interval with
+      // per-PR exponential backoff.
+      const prPoller = new PrPoller(
+        repo,
+        githubForge,
+        emit,
+        () => configStore.isGitHubConnected(),
+        () => (settings.get().prPollIntervalMinutes ?? 5) * 60_000,
+      );
+      prPoller.start();
+      registerPrHandlers(githubForge, runtime, prPoller);
 
       // M-A7: Recover sessions left in "running" state from a previous crash
       (async () => {

@@ -96,6 +96,7 @@ export function LiveSession({ session, projectName, backLabel = "Home", onClose,
       onStopAgent={() => mutations.stopSessionViaRuntime(session.id)}
       onReplyToComment={(repo, number, commentId, body) => mutations.replyToComment(repo, number, commentId, body)}
       onRerunChecks={(repo, number) => mutations.rerunChecks(repo, number)}
+      onRefreshPRs={() => mutations.refreshSessionPRs(session.id)}
       onAddressComments={(comments) => mutations.addressComments(session.id, comments)}
       onOpenPR={() => mutations.openSessionPR(session.id)}
       onOpenNote={onOpenNote}

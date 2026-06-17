@@ -1,4 +1,5 @@
-import { execFileSync } from "child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import os from "os";
@@ -8,6 +9,10 @@ import { OpenCodeServerManager } from "./server.js";
 import { hostToolBridge } from "./HostToolBridge.js";
 
 const OPENCODE_PATH = process.env.OPENCODE_BIN ?? path.join(os.homedir(), ".opencode", "bin", "opencode");
+
+// Spawn opencode asynchronously — execFileSync would block the main-process
+// event loop (freezing the whole UI) for the duration of every spawn.
+const execFileAsync = promisify(execFile);
 
 function resolvePath(raw: string): string {
   if (raw.startsWith("~")) return raw.replace(/^~/, os.homedir());
@@ -315,8 +320,8 @@ export class OpencodeHarness implements Harness {
 
   async health(): Promise<{ ok: boolean; version?: string; detail?: string }> {
     try {
-      const version = execFileSync(this.binPath, ["--version"], { timeout: 10_000 }).toString().trim();
-      return { ok: true, version };
+      const { stdout } = await execFileAsync(this.binPath, ["--version"], { timeout: 10_000 });
+      return { ok: true, version: stdout.toString().trim() };
     } catch (err) {
       return { ok: false, detail: err instanceof Error ? err.message : "opencode binary not found" };
     }
@@ -326,7 +331,8 @@ export class OpencodeHarness implements Harness {
     // `opencode models` prints "provider/model" per line, already filtered to
     // connected/authenticated providers — no running server required.
     try {
-      const output = execFileSync(this.binPath, ["models"], { timeout: 10_000 }).toString().trim();
+      const { stdout } = await execFileAsync(this.binPath, ["models"], { timeout: 10_000 });
+      const output = stdout.toString().trim();
       return output
         .split("\n")
         .map((l) => l.trim())
