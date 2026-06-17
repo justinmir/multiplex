@@ -101,6 +101,13 @@ export class OpencodeHarness implements Harness {
     let turnFinished = false; // guards one completion per turn
     let terminated = false;   // guards server/SSE teardown
     let streamedText = "";    // accumulated deltas for the current turn (fallback)
+    // opencode streams reasoning AND text as `message.part.delta { field:"text" }`;
+    // the two are told apart only by the owning part's type, learned from the
+    // preceding `message.part.updated`. Track that, and de-dupe tool lifecycle
+    // transitions (pending→running→completed) into one tool_use + one tool_result.
+    const partTypes = new Map<string, string>(); // partID → part.type
+    const toolStarted = new Set<string>();        // callID → tool_use emitted
+    const toolFinished = new Set<string>();       // callID → tool_result emitted
 
     const teardown = () => {
       if (terminated) return;
@@ -136,10 +143,34 @@ export class OpencodeHarness implements Harness {
       const props = (raw?.properties ?? {}) as Record<string, any>;
       if (props.sessionID && props.sessionID !== sessionId) return; // not our session
       switch (raw.type) {
+        case "message.part.updated": {
+          const part = (props.part ?? {}) as Record<string, any>;
+          if (part.id && part.type) partTypes.set(part.id, part.type);
+          if (part.type === "tool") {
+            const callId: string = part.callID ?? part.id;
+            const st = (part.state ?? {}) as Record<string, any>;
+            const status: string = st.status;
+            if (!toolStarted.has(callId) && ["pending", "running", "completed", "error"].includes(status)) {
+              toolStarted.add(callId);
+              onEvent({ type: "tool_use", name: part.tool ?? "tool", input: st.input, id: callId });
+            }
+            if (!toolFinished.has(callId) && (status === "completed" || status === "error")) {
+              toolFinished.add(callId);
+              const content = status === "error" ? (st.error ?? "Tool failed") : (st.output ?? "");
+              onEvent({ type: "tool_result", id: callId, content: String(content), isError: status === "error" });
+            }
+          }
+          break;
+        }
         case "message.part.delta":
           if (props.field === "text" && typeof props.delta === "string") {
-            streamedText += props.delta;
-            onEvent({ type: "message_delta", role: "agent", delta: props.delta });
+            // Route reasoning vs assistant text by the owning part's type.
+            if (partTypes.get(props.partID) === "reasoning") {
+              onEvent({ type: "reasoning_delta", delta: props.delta });
+            } else {
+              streamedText += props.delta;
+              onEvent({ type: "message_delta", role: "agent", delta: props.delta });
+            }
           }
           break;
         case "session.status":

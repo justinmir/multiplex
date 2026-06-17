@@ -42,6 +42,7 @@ export type HarnessEvent =
   | { type: "status"; status: HarnessStatus }
   | { type: "message"; role: SessionMsg["role"]; content: string; final?: boolean }
   | { type: "message_delta"; role: "agent"; delta: string }
+  | { type: "reasoning_delta"; delta: string }
   | { type: "tool_use"; name: string; input: unknown; id: string }
   | { type: "tool_result"; id: string; content: string; isError?: boolean }
   | { type: "usage"; tokens?: number; costUsd?: number; durationMs?: number }

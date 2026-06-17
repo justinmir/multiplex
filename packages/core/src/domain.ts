@@ -84,9 +84,19 @@ export interface Workspace {
 }
 
 export interface SessionMsg {
-  role: "user" | "agent" | "tool";
+  role: "user" | "agent" | "tool" | "thinking";
   content: string;
   ts: string;
+  /**
+   * Present when role === "tool": the agentic tool call this message represents.
+   * `content` carries the tool's result/output (empty while running).
+   */
+  tool?: {
+    name: string;
+    input?: unknown;
+    callId: string;
+    status: "running" | "ok" | "error";
+  };
 }
 
 export interface Session {

@@ -1,8 +1,10 @@
-import { Session, PullRequest, Reference, FileChange } from "../data/mockData";
+import { Session, PullRequest, Reference, FileChange, SessionMsg } from "../data/mockData";
 import { SessionDetail } from "./SessionDetail";
 
 interface Props {
   session: Session;
+  /** Ordered steps of the in-flight turn (thinking, tool calls, streaming reply). */
+  liveSteps?: SessionMsg[];
   prs: PullRequest[];
   onAddReference: (r: Reference) => void;
   /** Called when user sends a message in this session. Receives the raw message text. */
@@ -23,11 +25,12 @@ interface Props {
   onOpenPR?: () => void;
 }
 
-export function TaskView({ session, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
+export function TaskView({ session, liveSteps, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
       session={session}
+      liveSteps={liveSteps}
       prs={prs}
       references={session.references ?? []}
       onAddReference={onAddReference}
