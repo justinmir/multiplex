@@ -169,6 +169,11 @@ export function AppShell() {
     await mutations.stopSessionViaRuntime(session.id);
   };
 
+  const editPromptInSession = (newText: string) => {
+    if (!session) return;
+    mutations.editSessionPrompt(session.id, newText);
+  };
+
   const createSession = async (prompt: string) => {
     try {
       const { sessionId } = await mutations.startSession({ prompt });
@@ -309,6 +314,7 @@ export function AppShell() {
             queuedMessages={sessionQueue}
             onInterruptQueued={(i) => session && mutations.interruptQueuedMessage(session.id, i)}
             onDeleteQueued={(i) => session && mutations.removeQueuedMessage(session.id, i)}
+            onEditPrompt={editPromptInSession}
             prs={enrichedPRs}
             worktreeChanges={worktreeChanges}
             currentModel={settings?.defaultModel}

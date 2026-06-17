@@ -4,6 +4,7 @@ import {
   GitPullRequest, GitMerge, Coins, Clock, MessageSquare, FileCode, CheckCircle2, XCircle,
   CircleDashed, ExternalLink, Reply, ThumbsUp, AlertTriangle, ChevronDown, ChevronRight,
   Eye, BookOpen, Plus, PanelRightClose, PanelRightOpen, LayoutGrid, Folder, ArrowUp, Trash2,
+  Copy, Check, Pencil,
 } from "lucide-react";
 import { Session, SessionMsg, PullRequest, ReviewComment, CheckRun, Reference, Workspace, FileChange } from "../data/mockData";
 import { useDataMutations } from "../../lib/data/DataProvider.js";
@@ -26,6 +27,8 @@ interface Props {
   queuedMessages?: string[];
   onInterruptQueued?: (index: number) => void;
   onDeleteQueued?: (index: number) => void;
+  /** Replace + re-run the in-progress prompt. */
+  onEditPrompt?: (newText: string) => void;
   prs?: PullRequest[];
   references?: Reference[];
   onAddReference?: (r: Reference) => void;
@@ -53,7 +56,7 @@ interface Props {
 type RailTab = "overview" | "changes" | "reviews" | "checks" | "references";
 
 export function SessionDetail({
-  projectName, backLabel = "Back", session, liveSteps = [], queuedMessages = [], onInterruptQueued, onDeleteQueued,
+  projectName, backLabel = "Back", session, liveSteps = [], queuedMessages = [], onInterruptQueued, onDeleteQueued, onEditPrompt,
   prs = [], references = [],
   onAddReference, onStartSession, onSendMessage, onStopAgent, onClose, starterPrompts,
   currentModel, availableModels, onSelectModel, worktreeChanges = [],
@@ -124,6 +127,7 @@ export function SessionDetail({
             changeFiles={allFiles}
             totalAdds={allFiles.reduce((s, f) => s + f.additions, 0)}
             totalDels={allFiles.reduce((s, f) => s + f.deletions, 0)}
+            onEditPrompt={onEditPrompt}
           />
         )}
       </div>
@@ -457,15 +461,18 @@ function CheckSummary({ pr }: { pr: PullRequest }) {
 
 /* ---------- Conversation ---------- */
 
-function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDels }: {
+function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDels, onEditPrompt }: {
   session: Session;
   liveSteps: SessionMsg[];
   changeFiles: FileWithMeta[];
   totalAdds: number;
   totalDels: number;
+  onEditPrompt?: (newText: string) => void;
 }) {
   // Persisted transcript + the in-flight turn's live steps, in order.
   const all = [...session.messages, ...liveSteps];
+  // The in-progress prompt = the last user message while the agent is running.
+  const lastUserMsg = [...all].reverse().find((m) => m.role === "user") ?? null;
   // Collapse consecutive thinking/tool steps into one darkened "agent steps" rail,
   // so the transcript reads like other agentic chats.
   const groups: Array<{ kind: "msg"; msg: SessionMsg } | { kind: "steps"; items: SessionMsg[] }> = [];
@@ -490,7 +497,9 @@ function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDel
       )}
       {groups.map((g, i) =>
         g.kind === "msg"
-          ? <Message key={i} role={g.msg.role} content={g.msg.content} ts={g.msg.ts} />
+          ? <Message key={i} role={g.msg.role} content={g.msg.content} ts={g.msg.ts}
+              canEdit={running && g.msg === lastUserMsg && !!onEditPrompt}
+              onEdit={onEditPrompt} />
           : <StepGroup key={i} steps={g.items} />
       )}
       {running && (
@@ -506,15 +515,33 @@ function ConversationPane({ session, liveSteps, changeFiles, totalAdds, totalDel
   );
 }
 
-function Message({ role, content, ts }: { role: SessionMsg["role"]; content: string; ts: string }) {
+function Message({ role, content, ts, canEdit, onEdit }: { role: SessionMsg["role"]; content: string; ts: string; canEdit?: boolean; onEdit?: (newText: string) => void }) {
   // Thinking + tool steps render via StepGroup; Message handles user/agent text.
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(content);
   if (role === "thinking" || role === "tool") return null;
-  const meta = role === "user"
+  const isUser = role === "user";
+  const meta = isUser
     ? { Icon: User, label: "you", tone: "bg-secondary text-foreground" }
     : { Icon: Bot, label: "agent", tone: "bg-secondary text-foreground" };
   const Icon = meta.Icon;
+
+  const copy = () => {
+    navigator.clipboard?.writeText(content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {});
+  };
+  const submitEdit = () => {
+    const v = draft.trim();
+    if (!v || v === content) { setEditing(false); return; }
+    // Confirm before interrupting the active run (Enter on the dialog = OK).
+    if (window.confirm("Interrupt the current run and restart with the edited prompt?")) {
+      onEdit?.(v);
+      setEditing(false);
+    }
+  };
+
   return (
-    <div className="flex items-start gap-3">
+    <div className="group flex items-start gap-3">
       <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${meta.tone}`}>
         <Icon className="h-3 w-3" />
       </div>
@@ -523,8 +550,39 @@ function Message({ role, content, ts }: { role: SessionMsg["role"]; content: str
           <span>{meta.label}</span>
           <span className="text-muted-foreground/40">·</span>
           <span>{formatRelativeTime(ts)}</span>
+          {isUser && !editing && (
+            <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button onClick={copy} title="Copy prompt" className="rounded p-1 hover:bg-secondary hover:text-foreground">
+                {copied ? <Check className="h-3 w-3 text-[var(--success)]" /> : <Copy className="h-3 w-3" />}
+              </button>
+              {canEdit && (
+                <button onClick={() => { setDraft(content); setEditing(true); }} title="Edit & re-run" className="rounded p-1 hover:bg-secondary hover:text-foreground">
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </span>
+          )}
         </div>
-        {role === "agent"
+        {editing ? (
+          <div className="space-y-1.5">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(); }
+                if (e.key === "Escape") setEditing(false);
+              }}
+              rows={Math.min(8, draft.split("\n").length + 1)}
+              className="w-full resize-none rounded-md border border-border bg-card/40 p-2 text-[13.5px] leading-relaxed text-foreground focus:outline-none"
+            />
+            <div className="flex items-center gap-2 font-mono text-[10.5px] text-muted-foreground">
+              <button onClick={submitEdit} className="rounded-md bg-accent px-2 py-1 text-accent-foreground hover:bg-accent/90">Re-run</button>
+              <button onClick={() => setEditing(false)} className="rounded-md px-2 py-1 hover:bg-secondary hover:text-foreground">Cancel</button>
+              <span>Enter to re-run · Esc to cancel</span>
+            </div>
+          </div>
+        ) : role === "agent"
           ? <Markdown content={content} />
           : <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">{content}</p>}
       </div>

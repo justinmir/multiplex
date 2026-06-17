@@ -22,6 +22,10 @@ export function registerSessionRuntimeHandlers(runtime: SessionRuntime) {
     return runtime.stopSession(req.sessionId);
   });
 
+  handle("session:edit-prompt", async (req) => {
+    return runtime.editLastPrompt(req.sessionId, req.prompt);
+  });
+
   handle("session:queue:interrupt", async (req) => {
     return runtime.interruptQueued(req.sessionId, req.index);
   });

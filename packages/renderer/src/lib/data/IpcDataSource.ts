@@ -116,6 +116,10 @@ export class IpcDataSource implements DataSource {
     return call("session:queue:remove", { sessionId, index });
   }
 
+  async editSessionPrompt(sessionId: string, prompt: string): Promise<void> {
+    return call("session:edit-prompt", { sessionId, prompt });
+  }
+
   // ---- M-A8 — Harness health + model list ----
 
   async harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }> {

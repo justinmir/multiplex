@@ -41,6 +41,8 @@ export interface DataSource {
   /** Queue management for a session's pending messages. */
   interruptQueuedMessage(sessionId: string, index: number): Promise<void>;
   removeQueuedMessage(sessionId: string, index: number): Promise<void>;
+  /** Replace the last user prompt and re-run it. */
+  editSessionPrompt(sessionId: string, prompt: string): Promise<void>;
 
   // M-A8 — Harness health + model list
   harnessHealth(harnessId: string): Promise<{ ok: boolean; version?: string; detail?: string }>;

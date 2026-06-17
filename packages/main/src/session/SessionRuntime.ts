@@ -57,6 +57,9 @@ export class SessionRuntime {
   private activeTurns = new Set<string>();
   /** Per-session in-flight branch-name resolution (deduped + cached). */
   private branchGen = new Map<string, Promise<string>>();
+  /** Sessions whose queue dispatch is temporarily suppressed (during an
+   *  edit-and-rerun, which owns the next turn). */
+  private suppressDispatch = new Set<string>();
 
   private workspaces?: WorkspaceManager;
   private forge?: ForgeService;
@@ -544,6 +547,7 @@ export class SessionRuntime {
    *  Drives the queue for background sessions and after restart. */
   private async dispatchQueued(sessionId: string): Promise<void> {
     if (this.activeTurns.has(sessionId)) return; // a turn is (already) running
+    if (this.suppressDispatch.has(sessionId)) return; // an edit-rerun owns the next turn
     const existing = await this.repo.getSession(sessionId);
     if (!existing) return;
     const queue = existing.queuedMessages ?? [];
@@ -574,6 +578,42 @@ export class SessionRuntime {
       await this.stopSession(sessionId); // → done → dispatchQueued sends the front
     } else {
       this.enqueuePersist(sessionId, () => this.dispatchQueued(sessionId));
+    }
+  }
+
+  /**
+   * Replace the last user prompt with `newPrompt` and re-run it: stops the
+   * current turn, drops its (interrupted) output, and starts a fresh turn. Used
+   * by the in-place prompt editor.
+   */
+  async editLastPrompt(sessionId: string, newPrompt: string): Promise<void> {
+    const text = newPrompt.trim();
+    if (!text) return;
+    this.suppressDispatch.add(sessionId); // the stop below must not drain the queue
+    try {
+      if (this.activeTurns.has(sessionId)) {
+        const run = this.runs.get(sessionId);
+        if (run) { try { await run.stop(); } catch { /* ignore */ } }
+        this.activeTurns.delete(sessionId);
+      }
+      // Wait for in-flight persists (incl. the stop's done-flush) to settle.
+      await (this.persistChains.get(sessionId) ?? Promise.resolve());
+      this.resetTurnBuffer(sessionId);
+
+      const existing = await this.repo.getSession(sessionId);
+      if (!existing) return;
+      const projectId = await this.repo.getSessionProjectId(sessionId);
+      let lastUserIdx = -1;
+      for (let i = existing.messages.length - 1; i >= 0; i--) {
+        if (existing.messages[i].role === "user") { lastUserIdx = i; break; }
+      }
+      const base = lastUserIdx >= 0 ? existing.messages.slice(0, lastUserIdx) : existing.messages;
+      const messages = [...base, { role: "user", content: text, ts: new Date().toISOString() } as SessionMsg];
+      await this.repo.upsertSession({ ...existing, messages, status: "running" }, projectId);
+      this.emitFn("data:changed", { kind: "session" });
+      await this.deliverToHarness(sessionId, text, projectId, existing.model);
+    } finally {
+      this.suppressDispatch.delete(sessionId);
     }
   }
 

@@ -84,6 +84,8 @@ interface DataMutationValue {
   /** Run a queued message now (interrupting the current turn), or remove it. */
   interruptQueuedMessage(sessionId: string, index: number): Promise<void>;
   removeQueuedMessage(sessionId: string, index: number): Promise<void>;
+  /** Replace the last user prompt and re-run it. */
+  editSessionPrompt(sessionId: string, prompt: string): Promise<void>;
 
   // M-A8 — Harness health + model list
   /** Check harness health. */
@@ -517,6 +519,11 @@ export function DataProvider({
     async removeQueuedMessage(sessionId: string, index: number): Promise<void> {
       try { await activeSource.removeQueuedMessage(sessionId, index); }
       catch (err) { console.error("Failed to remove queued message:", err); }
+    },
+
+    async editSessionPrompt(sessionId: string, prompt: string): Promise<void> {
+      try { await activeSource.editSessionPrompt(sessionId, prompt); }
+      catch (err) { console.error("Failed to edit prompt:", err); }
     },
 
     // ---- M-A8 — Harness health + model list ----

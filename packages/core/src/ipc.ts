@@ -47,6 +47,8 @@ export interface IpcContract {
   };
   "session:send": { req: { sessionId: string; message: string }; res: void };
   "session:stop": { req: { sessionId: string }; res: void };
+  // Replace the last user prompt and re-run it (in-place prompt editor).
+  "session:edit-prompt": { req: { sessionId: string; prompt: string }; res: void };
   // Queue management: run a queued message now (interrupting the current turn),
   // or remove it from the queue.
   "session:queue:interrupt": { req: { sessionId: string; index: number }; res: void };

@@ -9,6 +9,8 @@ interface Props {
   queuedMessages?: string[];
   onInterruptQueued?: (index: number) => void;
   onDeleteQueued?: (index: number) => void;
+  /** Replace + re-run the in-progress prompt. */
+  onEditPrompt?: (newText: string) => void;
   prs: PullRequest[];
   onAddReference: (r: Reference) => void;
   /** Called when user sends a message in this session. Receives the raw message text. */
@@ -29,7 +31,7 @@ interface Props {
   onOpenPR?: () => void;
 }
 
-export function TaskView({ session, liveSteps, queuedMessages, onInterruptQueued, onDeleteQueued, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
+export function TaskView({ session, liveSteps, queuedMessages, onInterruptQueued, onDeleteQueued, onEditPrompt, prs, onAddReference, onSendMessage, onStopAgent, onClose, currentModel, availableModels, onSelectModel, worktreeChanges, onReplyToComment, onRerunChecks, onAddressComments, onOpenPR }: Props) {
   return (
     <SessionDetail
       backLabel="Home"
@@ -38,6 +40,7 @@ export function TaskView({ session, liveSteps, queuedMessages, onInterruptQueued
       queuedMessages={queuedMessages}
       onInterruptQueued={onInterruptQueued}
       onDeleteQueued={onDeleteQueued}
+      onEditPrompt={onEditPrompt}
       prs={prs}
       references={session.references ?? []}
       onAddReference={onAddReference}
