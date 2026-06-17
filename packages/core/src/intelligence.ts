@@ -15,6 +15,8 @@ export interface ProjectSummaryResult {
   summary: string;
   /** Ordered next steps (R-INTEL-2). */
   nextSteps: string[];
+  /** A ready-to-run session prompt for each next step (aligned by index). */
+  nextStepPrompts: string[];
   /** 4 actionable, specific session prompts a user could start next. */
   suggestedPrompts: string[];
   synthesizedAtMs: number;

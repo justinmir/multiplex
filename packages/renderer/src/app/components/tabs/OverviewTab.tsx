@@ -13,12 +13,14 @@ interface Props {
   /** M5.3 — (re)synthesize the project summary + next steps. */
   onResynthesize?: () => void;
   resynthesizing?: boolean;
+  /** Start a new project session from a prompt (used by clickable next steps). */
+  onStartSession?: (prompt: string) => void;
 }
 
 const iconFor = (k: ActivityItem["kind"]) =>
   k === "pr" ? GitPullRequest : k === "session" ? Terminal : k === "note" ? FileText : k === "ref" ? BookOpen : Sparkles;
 
-export function OverviewTab({ project, references, onOpenSession, onOpenNote, onOpenTab, onResynthesize, resynthesizing }: Props) {
+export function OverviewTab({ project, references, onOpenSession, onOpenNote, onOpenTab, onResynthesize, resynthesizing, onStartSession }: Props) {
   const synthStamp = project.summarySynthesizedAtMs
     ? `synthesized ${formatRelativeTime(project.summarySynthesizedAtMs)}`
     : "not synthesized yet";
@@ -53,10 +55,17 @@ export function OverviewTab({ project, references, onOpenSession, onOpenNote, on
           </div>
           <ul className="space-y-1.5">
             {project.nextSteps.map((step, i) => (
-              <li key={i} className="group flex items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-secondary/60">
-                <span className="mt-1 font-mono text-[10px] text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
-                <span className="flex-1 text-[13px] text-foreground">{step}</span>
-                <ArrowRight className="mt-0.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              <li key={i}>
+                <button
+                  onClick={() => onStartSession?.(project.nextStepPrompts?.[i] ?? step)}
+                  disabled={!onStartSession}
+                  title="Start a session for this step"
+                  className="group flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-secondary/60 disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  <span className="mt-1 font-mono text-[10px] text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="flex-1 text-[13px] text-foreground">{step}</span>
+                  <ArrowRight className="mt-0.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
               </li>
             ))}
           </ul>

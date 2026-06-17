@@ -42,6 +42,7 @@ export class IntelligenceService {
       ...project,
       summary: result.summary,
       nextSteps: result.nextSteps,
+      nextStepPrompts: result.nextStepPrompts?.length ? result.nextStepPrompts : project.nextStepPrompts,
       suggestedPrompts: result.suggestedPrompts?.length ? result.suggestedPrompts : project.suggestedPrompts,
       summarySynthesizedAtMs: result.synthesizedAtMs,
     });

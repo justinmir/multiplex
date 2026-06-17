@@ -122,6 +122,7 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
               references={project.references}
               onResynthesize={handleResynthesize}
               resynthesizing={resynthesizing}
+              onStartSession={onCreateProjectSession}
             />
           </div>
         )}

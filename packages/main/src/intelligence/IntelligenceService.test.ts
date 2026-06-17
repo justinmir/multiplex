@@ -14,7 +14,7 @@ function project(id: string): Project {
 
 const fakeProvider: IntelligenceProvider = {
   async summarizeProject() {
-    return { summary: "Synthesized summary.", nextSteps: ["Step A", "Step B"], suggestedPrompts: ["P1", "P2", "P3", "P4"], synthesizedAtMs: 12345 };
+    return { summary: "Synthesized summary.", nextSteps: ["Step A", "Step B"], nextStepPrompts: ["Do A", "Do B"], suggestedPrompts: ["P1", "P2", "P3", "P4"], synthesizedAtMs: 12345 };
   },
   async summarizeReference() {
     return "A one-line reference summary.";
@@ -69,7 +69,7 @@ test("notifyActivity does nothing when auto-synthesis is off", async () => {
   await repo.upsertProject(project("p1"));
   let called = 0;
   const countingProvider: IntelligenceProvider = {
-    async summarizeProject() { called++; return { summary: "x", nextSteps: [], suggestedPrompts: [], synthesizedAtMs: 1 }; },
+    async summarizeProject() { called++; return { summary: "x", nextSteps: [], nextStepPrompts: [], suggestedPrompts: [], synthesizedAtMs: 1 }; },
     async summarizeReference() { return ""; },
     async suggestGlobalPrompts() { return []; },
   };

@@ -177,6 +177,8 @@ export interface Project {
   summarySynthesizedAtMs?: number;
   /** 4 actionable session prompts generated during synthesis. */
   suggestedPrompts?: string[];
+  /** A ready-to-run session prompt for each next step (aligned by index). */
+  nextStepPrompts?: string[];
 }
 
 export type SessionWindow = "last_24h" | "last_7d" | "last_30d" | "older" | "archived";

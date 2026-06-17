@@ -9,9 +9,11 @@ const OPENCODE_PATH = process.env.OPENCODE_BIN ?? path.join(os.homedir(), ".open
 const SUMMARY_SYSTEM =
   "You are a sharp engineering lead writing a project status update. " +
   "Respond with ONLY a single JSON object, no prose, no code fences, of the exact shape: " +
-  '{"summary": string, "nextSteps": string[], "suggestedPrompts": string[]}. ' +
+  '{"summary": string, "nextSteps": string[], "nextStepPrompts": string[], "suggestedPrompts": string[]}. ' +
   "summary is 1-3 sentences capturing the current state and the critical path. " +
   "nextSteps is an ordered list of 2-5 concrete, specific actions. " +
+  "nextStepPrompts has the SAME length as nextSteps: for each step, a ready-to-run prompt " +
+  "(imperative, 1-2 sentences) a user could hand a coding agent to do exactly that step. " +
   "suggestedPrompts is EXACTLY 4 specific, actionable prompts (imperative, one sentence each) a " +
   "user could hand to a coding agent to push this project forward, grounded in the context. " +
   "Do not invent facts not in the context.";
@@ -69,12 +71,13 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       operation: "synthesis",
     });
 
-    const parsed = extractJson(raw) as { summary?: unknown; nextSteps?: unknown; suggestedPrompts?: unknown } | null;
+    const parsed = extractJson(raw) as { summary?: unknown; nextSteps?: unknown; nextStepPrompts?: unknown; suggestedPrompts?: unknown } | null;
     if (parsed && typeof parsed.summary === "string") {
       const strs = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
       return {
         summary: parsed.summary.trim(),
         nextSteps: strs(parsed.nextSteps),
+        nextStepPrompts: strs(parsed.nextStepPrompts),
         suggestedPrompts: strs(parsed.suggestedPrompts).slice(0, 4),
         synthesizedAtMs: Date.now(),
       };
@@ -83,7 +86,7 @@ export class OpencodeIntelligence implements IntelligenceProvider {
     // Fallback: keep the narrative, derive no steps rather than fail outright.
     const cleaned = raw.replace(/```[a-z]*|```/g, "").trim();
     if (!cleaned) throw new Error("Intelligence returned an empty response");
-    return { summary: cleaned.slice(0, 600), nextSteps: [], suggestedPrompts: [], synthesizedAtMs: Date.now() };
+    return { summary: cleaned.slice(0, 600), nextSteps: [], nextStepPrompts: [], suggestedPrompts: [], synthesizedAtMs: Date.now() };
   }
 
   async suggestGlobalPrompts(overview: string): Promise<string[]> {
