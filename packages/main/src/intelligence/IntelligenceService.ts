@@ -51,17 +51,59 @@ export class IntelligenceService {
     return result;
   }
 
-  /** Derive a one-line summary for a freshly-added reference (M5.5). */
+  /** Index a freshly-added reference ONCE (M5.5 / laundry-list-2). */
   async ingestReference(scope: RefScope, ref: Reference): Promise<void> {
     if (!this.getSettings().intelligenceEnabled) return;
-    if (ref.summary) return; // already summarized
+    if (ref.indexedAtMs) return; // already indexed once
     try {
-      const summary = await this.provider.summarizeReference({ title: ref.title, url: ref.url });
-      if (!summary) return;
-      await this.repo.upsertReference(scope, { ...ref, summary });
-      this.emit("data:changed", { kind: "reference" });
+      await this.indexReference(scope, ref);
     } catch (err) {
       console.error("[intelligence] reference ingestion failed:", err);
+    }
+  }
+
+  /**
+   * Pull a single reference's content via the harness (web/MCP tools) and persist
+   * it as an internal representation the summary step can reuse. Records an
+   * `indexError` (surfaced to the user) when the resource can't be reached, and
+   * always stamps `indexedAtMs`. Degrades to a one-line summary when the provider
+   * can't index (no tool access).
+   */
+  async indexReference(scope: RefScope, ref: Reference): Promise<Reference> {
+    const provider = this.provider;
+    let updated: Reference;
+    try {
+      if (provider.indexReference) {
+        const result = await provider.indexReference({ title: ref.title, url: ref.url, kind: ref.kind });
+        updated = {
+          ...ref,
+          indexedContent: result.error ? ref.indexedContent : (result.content ?? ref.indexedContent),
+          summary: result.summary ?? ref.summary,
+          indexError: result.error,
+          indexedAtMs: Date.now(),
+        };
+      } else {
+        const summary = ref.summary || (await provider.summarizeReference({ title: ref.title, url: ref.url }));
+        updated = { ...ref, summary: summary || ref.summary, indexError: undefined, indexedAtMs: Date.now() };
+      }
+    } catch (err) {
+      updated = { ...ref, indexError: err instanceof Error ? err.message : String(err), indexedAtMs: Date.now() };
+    }
+    await this.repo.upsertReference(scope, updated);
+    this.emit("data:changed", { kind: "reference" });
+    return updated;
+  }
+
+  /**
+   * (Re)index every reference of a project. Runs sequentially so we never spin up
+   * many transient opencode servers at once. Backs the "Refresh index" button.
+   */
+  async indexProjectReferences(projectId: string): Promise<void> {
+    const project = await this.repo.getProject(projectId);
+    if (!project) return;
+    for (const ref of project.references) {
+      try { await this.indexReference({ projectId }, ref); }
+      catch (err) { console.error("[intelligence] reference index failed:", err); }
     }
   }
 

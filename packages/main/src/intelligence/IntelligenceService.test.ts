@@ -64,6 +64,40 @@ test("ingestReference is a no-op when intelligence is disabled", async () => {
   svc.stop();
 });
 
+test("indexReference stores indexed content + summary + a freshness stamp", async () => {
+  const repo = new InMemoryRepository();
+  await repo.upsertReference({ projectId: "p1" }, { id: "r1", kind: "doc", title: "Spec", url: "https://e.com/spec", addedAt: "t" });
+  const provider: IntelligenceProvider = {
+    ...fakeProvider,
+    async indexReference() { return { content: "The spec says X, Y, Z.", summary: "One-line spec summary." }; },
+  };
+  const svc = new IntelligenceService(repo, provider, () => onSettings(), () => {});
+
+  const updated = await svc.indexReference({ projectId: "p1" }, { id: "r1", kind: "doc", title: "Spec", url: "https://e.com/spec", addedAt: "t" });
+  assert.equal(updated.indexedContent, "The spec says X, Y, Z.");
+  assert.equal(updated.summary, "One-line spec summary.");
+  assert.ok(updated.indexedAtMs && updated.indexedAtMs > 0);
+  assert.equal(updated.indexError, undefined);
+
+  const refs = await repo.getReferences({ projectId: "p1" });
+  assert.equal(refs[0].indexedContent, "The spec says X, Y, Z.");
+  svc.stop();
+});
+
+test("indexReference records a clear error when the resource is inaccessible", async () => {
+  const repo = new InMemoryRepository();
+  const provider: IntelligenceProvider = {
+    ...fakeProvider,
+    async indexReference() { return { error: "Authentication required." }; },
+  };
+  const svc = new IntelligenceService(repo, provider, () => onSettings(), () => {});
+
+  const updated = await svc.indexReference({ projectId: "p1" }, { id: "r1", kind: "link", title: "Private", url: "https://e.com/x", addedAt: "t" });
+  assert.equal(updated.indexError, "Authentication required.");
+  assert.ok(updated.indexedAtMs && updated.indexedAtMs > 0);
+  svc.stop();
+});
+
 test("notifyActivity does nothing when auto-synthesis is off", async () => {
   const repo = new InMemoryRepository();
   await repo.upsertProject(project("p1"));

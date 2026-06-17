@@ -4,6 +4,15 @@ import { recordAppTokens } from "../analytics/tokenTracker.js";
 
 const DISABLED_TOOLS = ["write", "edit", "patch", "bash", "read", "list", "glob", "grep", "webfetch", "websearch", "task", "todowrite", "skill"];
 
+/**
+ * Tool policy for reference indexing: keep filesystem/shell tools off (we never
+ * want a synthesis run touching the repo) but ENABLE web fetch/search so the
+ * agent can pull the resource. MCP server tools (wikis/docs/Google Docs) are
+ * enabled by default — they're simply absent from this disable list.
+ */
+const INDEX_DISABLED_TOOLS = ["write", "edit", "patch", "bash", "read", "list", "glob", "grep", "task", "todowrite", "skill"];
+export const INDEX_TOOLS: Record<string, boolean> = Object.fromEntries(INDEX_DISABLED_TOOLS.map((t) => [t, false]));
+
 function parseModel(model?: string): { providerID: string; modelID: string } | undefined {
   if (!model) return undefined;
   const i = model.indexOf("/");
@@ -82,6 +91,11 @@ export async function runOpencodePrompt(opts: {
   timeoutMs?: number;
   /** Label this one-shot's token usage as an app operation (for analytics). */
   operation?: string;
+  /**
+   * Per-tool enable/disable overrides. Defaults to the tool-less synthesis
+   * policy (everything off). Pass `INDEX_TOOLS` to allow web/MCP access.
+   */
+  tools?: Record<string, boolean>;
 }): Promise<string> {
   const mgr = new OpenCodeServerManager();
   await mgr.start(opts.binPath, os.tmpdir());
@@ -97,7 +111,7 @@ export async function runOpencodePrompt(opts: {
     const sessionId: string = (await created.json()).id;
 
     const model = parseModel(opts.model);
-    const tools = Object.fromEntries(DISABLED_TOOLS.map((t) => [t, false]));
+    const tools = opts.tools ?? Object.fromEntries(DISABLED_TOOLS.map((t) => [t, false]));
 
     const idle = waitForIdle(base, sessionId, abort.signal);
     // Mark `idle` as handled up front so a rejection (e.g. the /event fetch

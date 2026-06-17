@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
-import type { IntelligenceProvider, ProjectSummaryInput, ProjectSummaryResult } from "@app/core";
-import { runOpencodePrompt } from "./opencodeOneShot.js";
+import type { IntelligenceProvider, ProjectSummaryInput, ProjectSummaryResult, ReferenceIndexResult } from "@app/core";
+import { runOpencodePrompt, INDEX_TOOLS } from "./opencodeOneShot.js";
 import { buildSummaryPrompt } from "./assembleContext.js";
 
 const OPENCODE_PATH = process.env.OPENCODE_BIN ?? path.join(os.homedir(), ".opencode", "bin", "opencode");
@@ -27,6 +27,18 @@ const GLOBAL_PROMPTS_SYSTEM =
 const REFERENCE_SYSTEM =
   "Summarize the given reference in ONE concise sentence (no more than 20 words). " +
   "Respond with only that sentence — no quotes, no preamble.";
+
+const INDEX_SYSTEM =
+  "You index a project reference for later reuse. Use your available tools — web " +
+  "fetch/search and any configured MCP servers (wikis, docs, Google Docs, issue " +
+  "trackers) — to RETRIEVE the actual content of the reference described below. " +
+  "Respond with ONLY a single JSON object, no prose, no code fences. " +
+  'On success: {"content": string, "summary": string} where content is the extracted ' +
+  "substance (key facts, structure, decisions, important details — up to ~1500 words, " +
+  "plain text) and summary is one sentence (<= 20 words). " +
+  'If you CANNOT access the resource (authentication required, not found, no tool can ' +
+  'reach it, or it has no fetchable content): {"error": string} with a clear, specific, ' +
+  "user-facing reason. Never fabricate content you did not actually retrieve.";
 
 /** Extract the first balanced JSON object from a model response. */
 function extractJson(text: string): unknown | null {
@@ -120,5 +132,38 @@ export class OpencodeIntelligence implements IntelligenceProvider {
       operation: "reference",
     });
     return raw.replace(/^["'\s]+|["'\s]+$/g, "").split("\n")[0].slice(0, 200);
+  }
+
+  async indexReference(input: { title: string; url?: string; kind?: string }): Promise<ReferenceIndexResult> {
+    const prompt = [
+      `Title: ${input.title}`,
+      input.kind ? `Kind: ${input.kind}` : "",
+      input.url ? `URL: ${input.url}` : "",
+      input.url ? "Fetch this URL (and follow obvious links) to retrieve its content." : "There is no URL — index from the title alone only if you can find the resource via a tool; otherwise report an error.",
+    ].filter(Boolean).join("\n");
+
+    const raw = await runOpencodePrompt({
+      binPath: this.binPath,
+      model: this.getModel(),
+      system: INDEX_SYSTEM,
+      prompt,
+      tools: INDEX_TOOLS,
+      timeoutMs: 120_000,
+      operation: "index",
+    });
+
+    const parsed = extractJson(raw) as { content?: unknown; summary?: unknown; error?: unknown } | null;
+    if (parsed) {
+      const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+      const error = str(parsed.error);
+      if (error) return { error: error.slice(0, 400) };
+      const content = str(parsed.content);
+      const summary = str(parsed.summary);
+      if (content || summary) {
+        return { content: content?.slice(0, 8000), summary: summary?.slice(0, 200) };
+      }
+    }
+    // No parseable result — surface a clear error rather than silently storing junk.
+    return { error: "The harness returned no usable content for this reference." };
   }
 }

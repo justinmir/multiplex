@@ -7,6 +7,10 @@ export function registerIntelligenceHandlers(service: IntelligenceService) {
     return service.resynthesize(req.projectId);
   });
 
+  handle("refs:index", async (req) => {
+    await service.indexProjectReferences(req.projectId);
+  });
+
   handle("suggestions:global", async () => {
     return service.getGlobalSuggestions();
   });

@@ -73,6 +73,8 @@ interface DataMutationValue {
   // M5.3 — project intelligence
   /** (Re)synthesize a project's summary + next steps via the intelligence layer. */
   resynthesizeProject(projectId: string): Promise<void>;
+  /** (Re)index every reference of a project via the harness (web/MCP tools). */
+  indexReferences(projectId: string): Promise<void>;
 
   // M-A5 — Session runtime (live agent harness)
   /** Start a new session with the active harness. Returns the session ID. */
@@ -446,6 +448,18 @@ export function DataProvider({
         toast.success(result ? "Summary updated" : "Nothing to synthesize", { id });
       } catch (err) {
         toast.error(`Synthesis failed: ${err instanceof Error ? err.message : String(err)}`, { id });
+        throw err;
+      }
+    },
+
+    /** (Re)index a project's references via the harness; refresh on completion. */
+    async indexReferences(projectId: string): Promise<void> {
+      try {
+        await call("refs:index", { projectId });
+        await loadData();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
         throw err;
       }
     },

@@ -93,6 +93,8 @@ export interface IpcContract {
 
   // M5.3 — Project intelligence: (re)synthesize summary + next steps
   "project:resynthesize": { req: { projectId: string }; res: { summary: string; nextSteps: string[]; synthesizedAtMs: number } | null };
+  // (Re)index every reference of a project via the harness (web/MCP tools).
+  "refs:index": { req: { projectId: string }; res: void };
   // Suggested session prompts for the project-less "new session" view.
   "suggestions:global": { req: void; res: string[] };
   // Token-usage analytics: events at/after `sinceMs` (oldest first).

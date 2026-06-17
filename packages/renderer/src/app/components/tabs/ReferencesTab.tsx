@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, ExternalLink, Sparkles } from "lucide-react";
+import { Plus, ExternalLink, Sparkles, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Reference } from "../../data/mockData";
 import { ReferenceKindIcon, referenceKindLabel } from "../ReferenceKindIcon";
 import { formatRelativeTime } from "../../../lib/format/time.js";
@@ -7,12 +7,24 @@ import { formatRelativeTime } from "../../../lib/format/time.js";
 interface Props {
   references: Reference[];
   onAdd?: (r: Reference) => void;
+  /** (Re)index all references via the harness. Returns when indexing finishes. */
+  onRefreshIndex?: () => Promise<void>;
 }
 
-export function ReferencesTab({ references, onAdd }: Props) {
+export function ReferencesTab({ references, onAdd, onRefreshIndex }: Props) {
+  const [indexing, setIndexing] = useState(false);
+
+  const lastIndexedMs = references.reduce<number>((max, r) => Math.max(max, r.indexedAtMs ?? 0), 0);
+
+  const refresh = () => {
+    if (!onRefreshIndex || indexing) return;
+    setIndexing(true);
+    onRefreshIndex().finally(() => setIndexing(false));
+  };
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-foreground">References</h2>
           <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
@@ -20,7 +32,26 @@ export function ReferencesTab({ references, onAdd }: Props) {
             Indexed by the agent — used as context on every run. PRs, design docs, meeting notes, TODOs, anything relevant.
           </p>
         </div>
-        <AddReferenceButton onAdd={onAdd} />
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            {onRefreshIndex && references.length > 0 && (
+              <button
+                onClick={refresh}
+                disabled={indexing}
+                className={`flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] text-foreground hover:bg-secondary ${indexing ? "opacity-60" : ""}`}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${indexing ? "animate-spin" : ""}`} />
+                {indexing ? "Indexing…" : "Refresh index"}
+              </button>
+            )}
+            <AddReferenceButton onAdd={onAdd} />
+          </div>
+          {references.length > 0 && (
+            <span className="font-mono text-[10.5px] text-muted-foreground">
+              Last indexed: {lastIndexedMs ? formatRelativeTime(lastIndexedMs) : "never"}
+            </span>
+          )}
+        </div>
       </div>
 
       {references.length === 0 ? (
@@ -56,6 +87,17 @@ export function ReferenceRow({ reference, divider, compact }: { reference: Refer
             {reference.summary && <span className="text-foreground/70">{reference.summary}</span>}
           </div>
         )}
+        {!compact && reference.indexError ? (
+          <div className="mt-1 flex items-start gap-1 text-[10.5px] text-destructive">
+            <AlertCircle className="mt-px h-3 w-3 shrink-0" />
+            <span>Couldn't index: {reference.indexError}</span>
+          </div>
+        ) : !compact && reference.indexedAtMs ? (
+          <div className="mt-1 flex items-center gap-1 text-[10.5px] text-muted-foreground/80">
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+            <span>Indexed {formatRelativeTime(reference.indexedAtMs)}</span>
+          </div>
+        ) : null}
       </div>
       <span className="font-mono text-[10.5px] text-muted-foreground">{formatRelativeTime(reference.addedAt)}</span>
       {reference.url ? (

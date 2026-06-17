@@ -2,6 +2,7 @@ import type { Project, ProjectSummaryInput } from "@app/core";
 
 const MAX_NOTE_BODY = 800;
 const MAX_REF_SUMMARY = 200;
+const MAX_REF_CONTENT = 1200; // indexed reference content is richer than a one-liner
 const MAX_ITEMS = 20;
 
 function truncate(s: string, max: number): string {
@@ -28,7 +29,11 @@ export function assembleProjectContext(project: Project): AssembledContext {
   const references = (project.references ?? []).slice(0, MAX_ITEMS).map((r) => ({
     title: r.title,
     url: r.url,
-    body: r.summary ? truncate(r.summary, MAX_REF_SUMMARY) : undefined,
+    // Prefer the indexed content (pulled once via the harness) so synthesis and
+    // agent runs reuse it without re-fetching; fall back to the one-line summary.
+    body: r.indexedContent
+      ? truncate(r.indexedContent, MAX_REF_CONTENT)
+      : r.summary ? truncate(r.summary, MAX_REF_SUMMARY) : undefined,
   }));
 
   const sessions = project.sessions ?? [];

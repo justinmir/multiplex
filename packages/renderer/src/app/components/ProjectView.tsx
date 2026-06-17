@@ -139,6 +139,7 @@ export function ProjectView({ project, initialSessionId, onSync, isSyncing, onCr
             <ReferencesTab
               references={project.references}
               onAdd={(r) => mutations.upsertReference({ projectId: project.id }, r)}
+              onRefreshIndex={() => mutations.indexReferences(project.id)}
             />
           </div>
         )}

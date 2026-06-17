@@ -24,6 +24,16 @@ export interface Reference {
   summary?: string;      // one-line agent-extracted summary
   addedAt: string;
   addedBy?: string;
+  /**
+   * Internal representation of the reference's content, pulled once via the
+   * harness (with web/MCP tools enabled) so project intelligence can reuse it
+   * without re-fetching the resource on every synthesis.
+   */
+  indexedContent?: string;
+  /** When the reference was last indexed (epoch ms). Drives "Last Indexed". */
+  indexedAtMs?: number;
+  /** Clear, user-facing error when the harness couldn't access the resource. */
+  indexError?: string;
 }
 
 /** One token-usage data point, for per-session and application-wide analytics. */
